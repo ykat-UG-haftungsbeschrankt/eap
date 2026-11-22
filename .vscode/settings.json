@@ -1,0 +1,16 @@
+{
+	"chat.tools.terminal.autoApprove": {
+		"nextpnr-gowin": true,
+		"make": true,
+		"vvp": true,
+		"iverilog": true,
+		"set": true,
+		"openFPGALoader": true,
+		"dpkg-query": true,
+		"true": true,
+		"/^set -o pipefail; make test 2>&1 \\| grep -E 'PASS:\\|All \\.\\* tests passed\\|FATAL:\\|error:\\|syntax error\\|make: \\(\\\\\\*\\\\\\*\\\\\\*\\|Warning\\|warning:\\)'$/": {
+			"approve": true,
+			"matchCommandLine": true
+		}
+	}
+}
