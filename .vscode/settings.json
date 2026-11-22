@@ -1,13 +1,13 @@
 {
 	"chat.tools.terminal.autoApprove": {
-		"nextpnr-gowin": true,
-		"make": true,
-		"vvp": true,
-		"iverilog": true,
-		"set": true,
-		"openFPGALoader": true,
-		"dpkg-query": true,
-		"true": true,
+		"/^make test( PE_COUNT=[0-9]+ WEIGHT_W=[0-9]+ IDLE_W=[0-9]+( EVENT_FIFO_DEPTH=[0-9]+)?)?$/": {
+			"approve": true,
+			"matchCommandLine": true
+		},
+		"/^make bitstream( PE_COUNT=[0-9]+ WEIGHT_W=[0-9]+ IDLE_W=[0-9]+( EVENT_FIFO_DEPTH=[0-9]+)?)?$/": {
+			"approve": true,
+			"matchCommandLine": true
+		},
 		"/^set -o pipefail; make test 2>&1 \\| grep -E 'PASS:\\|All \\.\\* tests passed\\|FATAL:\\|error:\\|syntax error\\|make: \\(\\\\\\*\\\\\\*\\\\\\*\\|Warning\\|warning:\\)'$/": {
 			"approve": true,
 			"matchCommandLine": true

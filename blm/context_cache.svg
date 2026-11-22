@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="860" viewBox="0 0 1480 860" role="img" aria-labelledby="title description">
+  <title id="title">BLM context lookup: fully associative cache versus hashing</title>
+  <desc id="description">The current BLM compares the full recent-bit context against every cache entry, then predicts on a hit or inserts with round-robin replacement on a miss. A separate panel shows an optional hash-indexed design that selects a small set before comparing full tags.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#57b7ff"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#5ed59a"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#ffbf69"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #e8eef7; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #aebdd0; }
+      .section { font-size: 18px; font-weight: 700; }
+      .label { font-size: 14px; fill: #d3deeb; }
+      .small { font-size: 12px; fill: #aebdd0; }
+      .tiny { font-size: 11px; fill: #aebdd0; }
+      .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; fill: #f1f5fa; }
+      .panel { fill: #0d1927; stroke: #30455b; stroke-width: 2; }
+      .card { fill: #111e2e; stroke: #2d455f; stroke-width: 2; }
+      .inner { fill: #17283b; stroke: #38536f; stroke-width: 1.5; }
+      .hit { fill: #142c27; stroke: #5ed59a; stroke-width: 1.5; }
+      .miss { fill: #33291c; stroke: #ffbf69; stroke-width: 1.5; }
+      .line-blue { fill: none; stroke: #57b7ff; stroke-width: 3; marker-end: url(#arrow-blue); }
+      .line-green { fill: none; stroke: #5ed59a; stroke-width: 3; marker-end: url(#arrow-green); }
+      .line-orange { fill: none; stroke: #ffbf69; stroke-width: 3; marker-end: url(#arrow-orange); }
+      .dashed { fill: none; stroke: #718198; stroke-width: 2; stroke-dasharray: 7 6; }
+    </style>
+  </defs>
+
+  <rect width="1480" height="860" fill="#09121e"/>
+  <text class="title" x="36" y="48">How the BLM finds a bit context</text>
+  <text class="subtitle" x="38" y="76">The current design is fully associative. Hashing is an alternative lookup organization, not what the RTL does today.</text>
+
+  <rect x="32" y="108" width="696" height="690" rx="18" class="panel"/>
+  <text x="54" y="145" class="section">CURRENT RTL: full-tag scan</text>
+  <text x="54" y="169" class="small">No hash function; every stored tag is checked for an exact match.</text>
+
+  <rect x="58" y="193" width="145" height="72" rx="11" class="inner"/>
+  <text x="76" y="220" class="label">Incoming bit</text>
+  <text x="76" y="244" class="mono">bit_valid</text>
+  <path d="M203 229 H242" class="line-blue"/>
+
+  <rect x="246" y="193" width="176" height="72" rx="11" class="inner"/>
+  <text x="267" y="220" class="label">History register</text>
+  <text x="267" y="244" class="mono">HISTORY_BITS</text>
+  <path d="M422 229 H460" class="line-blue"/>
+
+  <rect x="464" y="193" width="235" height="72" rx="11" class="inner"/>
+  <text x="487" y="220" class="label">Full-context lookup</text>
+  <text x="487" y="244" class="small">compare against all C tags</text>
+
+  <rect x="58" y="298" width="350" height="205" rx="11" class="card"/>
+  <text x="78" y="326" class="label">Fixed-capacity cache entries</text>
+  <rect x="78" y="341" width="310" height="32" rx="5" class="inner"/>
+  <text x="91" y="362" class="tiny">slot</text>
+  <text x="145" y="362" class="tiny">valid</text>
+  <text x="209" y="362" class="tiny">full context tag</text>
+  <text x="340" y="362" class="tiny">ctr</text>
+  <line x1="78" y1="379" x2="388" y2="379" stroke="#38536f"/>
+  <text x="93" y="400" class="mono">0</text>
+  <text x="151" y="400" class="mono">1</text>
+  <text x="209" y="400" class="mono">0011</text>
+  <text x="343" y="400" class="mono">10</text>
+  <line x1="78" y1="411" x2="388" y2="411" stroke="#38536f"/>
+  <text x="93" y="432" class="mono">1</text>
+  <text x="151" y="432" class="mono">1</text>
+  <text x="209" y="432" class="mono">1010</text>
+  <text x="343" y="432" class="mono">00</text>
+  <line x1="78" y1="443" x2="388" y2="443" stroke="#38536f"/>
+  <text x="93" y="464" class="mono">...</text>
+  <text x="151" y="464" class="mono">...</text>
+  <text x="209" y="464" class="mono">...</text>
+  <text x="343" y="464" class="mono">...</text>
+  <text x="78" y="488" class="tiny">Each entry: valid + H-bit tag + 2-bit counter</text>
+
+  <path d="M581 265 V286 H408 V394" class="dashed"/>
+  <path d="M408 394 H432" class="line-blue"/>
+  <rect x="436" y="298" width="263" height="205" rx="11" class="inner"/>
+  <text x="456" y="328" class="section">Compare tags</text>
+  <text x="456" y="357" class="label">A hit means exact equality:</text>
+  <text x="456" y="383" class="mono">stored_tag == history</text>
+  <text x="456" y="417" class="small">The scan is over at most C entries.</text>
+  <text x="456" y="442" class="small">A context is never confused with a</text>
+  <text x="456" y="462" class="small">different tag through hash collision.</text>
+  <text x="456" y="487" class="tiny">Lookup and prediction are combinational.</text>
+
+  <path d="M567 503 V526 H220 V545" class="line-green"/>
+  <path d="M567 503 V526 H535 V545" class="line-orange"/>
+  <rect x="58" y="548" width="306" height="166" rx="12" class="hit"/>
+  <text x="80" y="580" class="section" fill="#83e4b2">CACHE HIT</text>
+  <text x="80" y="609" class="mono">next_bit_valid = 1</text>
+  <text x="80" y="634" class="label">Predict from counter[1].</text>
+  <text x="80" y="660" class="small">On the clock edge, train the matching</text>
+  <text x="80" y="680" class="small">saturating counter with observed_bit.</text>
+
+  <rect x="390" y="548" width="309" height="166" rx="12" class="miss"/>
+  <text x="412" y="580" class="section" fill="#ffd28c">CACHE MISS</text>
+  <text x="412" y="609" class="mono">next_bit_valid = 0</text>
+  <text x="412" y="634" class="label">No learned prediction yet.</text>
+  <text x="412" y="660" class="small">Insert at first empty slot; if full,</text>
+  <text x="412" y="680" class="small">evict the round-robin victim.</text>
+
+  <text x="58" y="750" class="small">Round-robin chooses which entry to replace; it does not choose the lookup slot.</text>
+
+  <rect x="752" y="108" width="696" height="690" rx="18" class="panel"/>
+  <text x="774" y="145" class="section">OPTIONAL ALTERNATIVE: hash-indexed cache</text>
+  <text x="774" y="169" class="small">A hash narrows the lookup to a bucket; this is not the current BLM RTL.</text>
+
+  <rect x="778" y="193" width="145" height="72" rx="11" class="inner"/>
+  <text x="799" y="220" class="label">H-bit history</text>
+  <text x="799" y="244" class="mono">context key</text>
+  <path d="M923 229 H960" class="line-blue"/>
+
+  <rect x="964" y="193" width="160" height="72" rx="11" class="miss"/>
+  <text x="987" y="220" class="label">Hash function</text>
+  <text x="987" y="244" class="mono">hash(history)</text>
+  <path d="M1124 229 H1160" class="line-orange"/>
+
+  <rect x="1164" y="193" width="248" height="72" rx="11" class="inner"/>
+  <text x="1187" y="220" class="label">Select one set / bucket</text>
+  <text x="1187" y="244" class="small">then check its stored tags</text>
+
+  <rect x="778" y="298" width="308" height="205" rx="11" class="inner"/>
+  <text x="798" y="330" class="section">Tag check still matters</text>
+  <text x="798" y="362" class="label">Compare the full stored tag.</text>
+  <text x="798" y="391" class="mono">tag == history ?</text>
+  <text x="798" y="426" class="small">Same hash does not mean same</text>
+  <text x="798" y="447" class="small">context. Full tags prevent false hits.</text>
+  <text x="798" y="480" class="tiny">Set-associative: compare a few ways.</text>
+
+  <path d="M1288 265 V285 H1160 V353" class="dashed"/>
+  <path d="M1160 353 H1125" class="line-blue"/>
+  <rect x="1129" y="298" width="283" height="205" rx="11" class="card"/>
+  <text x="1149" y="330" class="label">Selected bucket, e.g. 2 ways</text>
+  <rect x="1149" y="349" width="243" height="51" rx="7" class="inner"/>
+  <text x="1164" y="371" class="tiny">way 0</text>
+  <text x="1220" y="371" class="mono">valid | tag | ctr</text>
+  <text x="1164" y="389" class="tiny">entry</text>
+  <rect x="1149" y="410" width="243" height="51" rx="7" class="inner"/>
+  <text x="1164" y="432" class="tiny">way 1</text>
+  <text x="1220" y="432" class="mono">valid | tag | ctr</text>
+  <text x="1164" y="450" class="tiny">entry</text>
+  <text x="1149" y="486" class="tiny">Hash collisions compete for these ways.</text>
+
+  <path d="M932 503 V526 H936 V545" class="line-green"/>
+  <path d="M1288 503 V526 H1270 V545" class="line-orange"/>
+  <rect x="778" y="548" width="306" height="166" rx="12" class="hit"/>
+  <text x="800" y="580" class="section" fill="#83e4b2">TAG HIT</text>
+  <text x="800" y="611" class="label">Predict and update the matching</text>
+  <text x="800" y="634" class="label">counter, just like current BLM.</text>
+  <text x="800" y="676" class="small">Fewer tag comparisons per lookup.</text>
+
+  <rect x="1112" y="548" width="300" height="166" rx="12" class="miss"/>
+  <text x="1134" y="580" class="section" fill="#ffd28c">TAG MISS</text>
+  <text x="1134" y="611" class="label">Empty way or replace one when full.</text>
+  <text x="1134" y="640" class="small">Different contexts can hash to the</text>
+  <text x="1134" y="661" class="small">same set, so evictions may increase.</text>
+
+  <text x="778" y="750" class="small">Hashing changes lookup cost and collision behavior, not the next-bit objective.</text>
+
+  <rect x="32" y="812" width="1416" height="32" rx="8" fill="#101d2b"/>
+  <text x="52" y="833" class="small">Current design = scan all full tags. Hash-indexed design = hash to a set, then verify full tag. Round-robin is replacement policy only.</text>
+</svg>

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" role="img" aria-labelledby="title description">
   <title id="title">EAP-16 implemented interfaces and functionality</title>
-  <desc id="description">Diagram of the UART command path, open-loop 16-PE EAP logic, Tang Nano 9K pins and LEDs, plus the current FPGA placement limitation.</desc>
+  <desc id="description">Diagram of the UART command path, shared event FIFO and spike-feedback path for the 16-PE EAP logic, Tang Nano 9K pins and LEDs, plus the current FPGA placement limitation.</desc>
   <defs>
     <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
       <path d="M0,0 L12,6 L0,12 Z" fill="#57b7ff"/>
@@ -34,10 +34,10 @@
 
   <rect width="1600" height="1040" fill="#09121e"/>
   <text class="title" x="42" y="52">EAP-16: implemented interfaces and data flow</text>
-  <text class="subtitle" x="44" y="80">RTL/UART simulation is implemented; the full UART-enabled 16-PE design is not placeable on the Tang Nano 9K.</text>
+  <text class="subtitle" x="44" y="80">This shows the default 16-PE architecture; the loaded Tang Nano test image uses two PEs.</text>
 
   <rect x="1192" y="25" width="360" height="48" rx="12" class="warning"/>
-  <text x="1210" y="55" font-size="15" font-weight="700" fill="#ffaaaa">NO UART BITSTREAM LOADED</text>
+  <text x="1210" y="55" font-size="15" font-weight="700" fill="#ffaaaa">2-PE UART TEST IMAGE LOADED</text>
 
   <rect x="314" y="112" width="1240" height="600" rx="20" fill="#0d1927" stroke="#30455b" stroke-width="2"/>
   <text x="338" y="143" class="section">Tang Nano 9K RTL top</text>
@@ -82,8 +82,8 @@
 
   <rect x="704" y="164" width="484" height="476" rx="14" class="card"/>
   <text x="726" y="196" class="section">eap16_top: 16 logical PEs</text>
-  <text x="726" y="220" class="small">One source event is broadcast; teacher_spike is per PE.</text>
-  <text x="726" y="242" class="small">event_ready is currently constant 1.</text>
+  <text x="726" y="220" class="small">Shared FIFO broadcasts events; teacher_spike is per PE.</text>
+  <text x="726" y="242" class="small">Round-robin feedback; event_ready backpressures input.</text>
 
   <g>
     <rect x="730" y="260" width="86" height="32" rx="8" class="pe"/><text x="754" y="282" class="label">PE 0</text>
@@ -114,31 +114,31 @@
   <text x="1242" y="432" class="small">UART pin 17 TX / pin 18 RX</text>
 
   <rect x="1222" y="484" width="300" height="156" rx="14" class="inner"/>
-  <text x="1242" y="515" class="section">Open-loop boundary</text>
-  <text x="1242" y="542" class="small">Spike outputs are read by UART,</text>
-  <text x="1242" y="563" class="small">not routed back as new events.</text>
+  <text x="1242" y="515" class="section">Shared event router</text>
+  <text x="1242" y="542" class="small">Spike IDs are queued and routed</text>
+  <text x="1242" y="563" class="small">back as events to all PEs.</text>
   <path d="M1242 584 H1498" class="muted-line"/>
-  <text x="1242" y="614" class="tiny">No event FIFO, arbiter, or spike-feedback router</text>
+  <text x="1242" y="614" class="tiny">64-entry FIFO; overflow is sticky and LED-visible</text>
 
   <rect x="42" y="744" width="1510" height="245" rx="16" class="warning"/>
   <text x="66" y="780" font-size="21" font-weight="700" fill="#ffaaaa">Implementation and hardware status</text>
   <rect x="66" y="805" width="440" height="132" rx="10" class="ok"/>
   <text x="86" y="834" class="section">Simulation</text>
-  <text x="86" y="861" class="label">PE learning, boundary, LIF, and UART command</text>
-  <text x="86" y="885" class="label">tests pass, including train/read/tick flow.</text>
+  <text x="86" y="861" class="label">PE learning, router, boundary, LIF, and UART</text>
+  <text x="86" y="885" class="label">tests pass, including feedback and overflow.</text>
   <text x="86" y="915" class="small">Synapses are logical register state, not fabric rewiring.</text>
 
-  <rect x="530" y="805" width="475" height="132" rx="10" fill="#302b1c" stroke="#ffbf69" stroke-width="1.5"/>
-  <text x="550" y="834" class="section">Tang Nano 9K placement</text>
-  <text x="550" y="861" class="label">Full UART-enabled 16-PE top: 63,456 / 8,640</text>
-  <text x="550" y="885" class="label">slices estimated; nextpnr cannot place it.</text>
-  <text x="550" y="915" class="small">No UART-enabled bitstream has been programmed.</text>
+  <rect x="530" y="805" width="475" height="132" rx="10" class="ok"/>
+  <text x="550" y="834" class="section">Current Tang Nano image</text>
+  <text x="550" y="861" class="label">N=2, W=4, idle=4: 1,716 / 8,640 slices</text>
+  <text x="550" y="885" class="label">Routed at 13.5 MHz and programmed.</text>
+  <text x="550" y="915" class="small">UART uses PE IDs 00 and 01.</text>
 
   <rect x="1029" y="805" width="497" height="132" rx="10" class="inner"/>
-  <text x="1049" y="834" class="section">Last successful board image</text>
-  <text x="1049" y="861" class="label">Fixed source-3 to PE-7 smoke demo, not full 16-PE</text>
-  <text x="1049" y="885" class="label">operation. Constant wiring let synthesis prune unused PEs.</text>
-  <text x="1049" y="915" class="small">The current UART protocol is verified in simulation only.</text>
+  <text x="1049" y="834" class="section">Default 16-PE target</text>
+  <text x="1049" y="861" class="label">Pre-router estimate: 63,456 / 8,640 slices</text>
+  <text x="1049" y="885" class="label">for the earlier UART design.</text>
+  <text x="1049" y="915" class="small">Current router integration is not placed.</text>
 
-  <text x="45" y="1020" class="tiny">Commands are stop-and-wait; full closed-loop event routing and real backpressure remain unimplemented.</text>
+  <text x="45" y="1020" class="tiny">Commands are stop-and-wait; external input uses valid/ready and feedback overflow is explicit.</text>
 </svg>

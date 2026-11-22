@@ -1,7 +1,12 @@
 module eap16_tangnano9k_top #(
+    parameter int N = 16,
+    parameter int FANIN = (N < 16) ? N : 16,
+    parameter int EVENT_FIFO_DEPTH = 64,
     parameter int unsigned HEARTBEAT_DIV = 6_750_000,
     parameter int UART_CLOCK_HZ = 13_500_000,
-    parameter int UART_BAUD_RATE = 115_200
+    parameter int UART_BAUD_RATE = 115_200,
+    parameter int WEIGHT_W = 8,
+    parameter int IDLE_W = 8
 ) (
     input  logic sys_clk,
     input  logic sys_rst_n,
@@ -12,12 +17,13 @@ module eap16_tangnano9k_top #(
     logic eap_clk;
     logic eap_rst;
     logic event_valid;
-    logic [3:0] event_source;
+    logic [$clog2(N)-1:0] event_source;
     logic event_ready;
-    logic [15:0] teacher_spike;
+    logic event_overflow;
+    logic [N-1:0] teacher_spike;
     logic maintenance_tick;
-    logic [15:0] spikes;
-    logic [79:0] packed_connection_counts;
+    logic [N-1:0] spikes;
+    logic [N*5-1:0] packed_connection_counts;
     logic [4:0] selected_connection_count;
     logic [3:0] status_pe;
     logic [31:0] heartbeat_counter;
@@ -41,6 +47,7 @@ module eap16_tangnano9k_top #(
     end
 
     eap16_uart_console #(
+        .N(N),
         .UART_CLOCK_HZ(UART_CLOCK_HZ),
         .UART_BAUD_RATE(UART_BAUD_RATE)
     ) console (
@@ -59,16 +66,21 @@ module eap16_tangnano9k_top #(
     );
 
     eap16_top #(
-        .N(16),
-        .FANIN(16)
+        .N(N),
+        .FANIN(FANIN),
+        .EVENT_FIFO_DEPTH(EVENT_FIFO_DEPTH),
+        .WEIGHT_W(WEIGHT_W),
+        .IDLE_W(IDLE_W)
     ) network (
         .clk(eap_clk),
         .rst(eap_rst),
+        .learning_enable(1'b1),
         .event_valid(event_valid),
         .event_source(event_source),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
+        .event_overflow(event_overflow),
         .spikes(spikes),
         .packed_connection_counts(packed_connection_counts)
     );
@@ -89,6 +101,8 @@ module eap16_tangnano9k_top #(
     always_ff @(posedge eap_clk) begin
         if (eap_rst)
             led_status <= 6'b111111;
+        else if (event_overflow)
+            led_status <= 6'b000000;
         else
             led_status <= ~{selected_connection_count[3:0],
                             (selected_connection_count != 0),

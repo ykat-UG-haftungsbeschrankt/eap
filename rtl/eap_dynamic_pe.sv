@@ -3,13 +3,23 @@ module eap_dynamic_pe #(
     parameter int PE_ID = 0,
     parameter int N = 16,
     parameter int FANIN = 16,
+    parameter int WEIGHT_W = 8,
+    parameter int IDLE_W = 8,
     parameter logic signed [23:0] THRESHOLD = 24'sd1000,
     parameter logic [7:0] FORM_THRESHOLD = 8'd8,
-    parameter logic [7:0] PRUNE_AGE = 8'd200,
-    parameter logic signed [7:0] MIN_WEIGHT = 8'sd2
+    // Scale the default with signed full scale, keeping narrow weights nonzero.
+    parameter logic signed [WEIGHT_W-1:0] INITIAL_WEIGHT =
+        (WEIGHT_W >= 8) ? WEIGHT_W'(8) :
+        (WEIGHT_W >= 7) ? WEIGHT_W'(4) :
+        (WEIGHT_W >= 6) ? WEIGHT_W'(2) : WEIGHT_W'(1),
+    parameter logic signed [WEIGHT_W-1:0] MIN_WEIGHT =
+        (WEIGHT_W >= 3) ? WEIGHT_W'(2) : WEIGHT_W'(1),
+    parameter logic [IDLE_W-1:0] PRUNE_AGE =
+        (IDLE_W >= 8) ? IDLE_W'(8'd200) : {IDLE_W{1'b1}}
 ) (
     input  logic clk,
     input  logic rst,
+    input  logic learning_enable,
     input  logic event_valid,
     input  logic [$clog2(N)-1:0] event_source,
     input  logic teacher_spike,
@@ -19,10 +29,15 @@ module eap_dynamic_pe #(
 );
 
     localparam int ID_W = $clog2(N);
+    localparam logic signed [WEIGHT_W-1:0] WEIGHT_MAX =
+        {1'b0, {(WEIGHT_W-1){1'b1}}};
+    localparam logic signed [WEIGHT_W-1:0] WEIGHT_MIN = -WEIGHT_MAX;
+    localparam logic [IDLE_W-1:0] IDLE_MAX = {IDLE_W{1'b1}};
+
     logic [FANIN-1:0] syn_valid;
     logic [ID_W-1:0] syn_source [0:FANIN-1];
-    logic signed [7:0] syn_weight [0:FANIN-1];
-    logic [7:0] syn_idle [0:FANIN-1];
+    logic signed [WEIGHT_W-1:0] syn_weight [0:FANIN-1];
+    logic [IDLE_W-1:0] syn_idle [0:FANIN-1];
 
     logic [7:0] candidate_pre [0:N-1];
     logic [N-1:0] candidate_active;
@@ -32,7 +47,7 @@ module eap_dynamic_pe #(
 
     logic signed [23:0] membrane;
     logic signed [23:0] syn_current;
-    logic signed [7:0] event_weight;
+    logic signed [WEIGHT_W-1:0] event_weight;
     logic signed [23:0] next_membrane;
     logic will_spike;
     logic event_weight_found;
@@ -75,9 +90,9 @@ module eap_dynamic_pe #(
                 pending_source = p;
         end
 
-        // With FANIN <= 16 and weights in [-127, 127], syn_current is
-        // bounded to +/-2032 and the leak keeps this 24-bit update in range.
-        syn_current = {{16{event_weight[7]}}, event_weight};
+        // Unique source IDs bound one event's current to the selected weight.
+        syn_current =
+            {{(24-WEIGHT_W){event_weight[WEIGHT_W-1]}}, event_weight};
         next_membrane = membrane - (membrane >>> 4) + syn_current;
         will_spike = teacher_spike || (event_valid && next_membrane >= THRESHOLD);
         connection_count = count_tmp[$clog2(FANIN+1)-1:0];
@@ -109,76 +124,83 @@ module eap_dynamic_pe #(
                 membrane <= next_membrane;
             end
 
-            // Candidate traces: update the active source; decay every other
-            // candidate on maintenance ticks, independent of event traffic.
-            for (i = 0; i < N; i = i + 1) begin
-                if (event_valid && event_source == ID_W'(i) && i != PE_ID) begin
-                    if (candidate_pre[i] != 8'hff)
-                        candidate_pre[i] <= candidate_pre[i] + 1'b1;
-                end else if (maintenance_tick && candidate_pre[i] != 0) begin
-                    candidate_pre[i] <= (candidate_pre[i] > 8'd15)
-                                      ? candidate_pre[i] - (candidate_pre[i] >> 4)
-                                      : candidate_pre[i] - 1'b1;
-                end
-            end
-
-            // Post trace has its own clocking/decay path.
-            if (will_spike) begin
-                if (post_trace != 8'hff)
-                    post_trace <= post_trace + 1'b1;
-            end else if (maintenance_tick && post_trace != 0) begin
-                post_trace <= (post_trace > 8'd15)
-                            ? post_trace - (post_trace >> 4)
-                            : post_trace - 1'b1;
-            end
-
-            // Existing synapses: activity refreshes age; simultaneous weight
-            // updates use explicit potentiation priority.
-            for (i = 0; i < FANIN; i = i + 1) begin
-                if (syn_valid[i]) begin
-                    if (event_valid && syn_source[i] == event_source) begin
-                        syn_idle[i] <= '0;
-                    end else if (maintenance_tick && syn_idle[i] != 8'hff) begin
-                        syn_idle[i] <= syn_idle[i] + 1'b1;
-                    end
-
-                    // Potentiation has priority if pre- and post-updates coincide.
-                    if (will_spike && candidate_active[syn_source[i]]) begin
-                        if (syn_weight[i] < 8'sd127)
-                            syn_weight[i] <= syn_weight[i] + 1'b1;
-                    end else if (event_valid && syn_source[i] == event_source &&
-                                 post_trace != 0) begin
-                        if (syn_weight[i] > -8'sd127)
-                            syn_weight[i] <= syn_weight[i] - 1'b1;
-                    end
-
-                    if (maintenance_tick &&
-                        !(event_valid && syn_source[i] == event_source) &&
-                        syn_idle[i] >= PRUNE_AGE &&
-                        ((syn_weight[i] >= 0 && syn_weight[i] < MIN_WEIGHT) ||
-                         (syn_weight[i] < 0 && syn_weight[i] > -MIN_WEIGHT))) begin
-                        syn_valid[i] <= 1'b0;
-                        pending[syn_source[i]] <= 1'b0;
-                    end
-                end
-            end
-
-            // On a postsynaptic spike, mark active unconnected sources pending.
-            if (will_spike) begin
+            if (learning_enable) begin
+                // Candidate traces update the active source and decay on ticks.
                 for (i = 0; i < N; i = i + 1) begin
-                    if (i != PE_ID && candidate_pre[i] >= FORM_THRESHOLD &&
-                        !connected_sources[i])
-                        pending[i] <= 1'b1;
+                    if (event_valid && event_source == ID_W'(i) &&
+                        i != PE_ID) begin
+                        if (candidate_pre[i] != 8'hff)
+                            candidate_pre[i] <= candidate_pre[i] + 1'b1;
+                    end else if (maintenance_tick && candidate_pre[i] != 0) begin
+                        candidate_pre[i] <= (candidate_pre[i] > 8'd15)
+                                          ? candidate_pre[i] -
+                                            (candidate_pre[i] >> 4)
+                                          : candidate_pre[i] - 1'b1;
+                    end
                 end
-            end
 
-            // Allocate at most one pending connection per cycle.
-            if (free_slot != -1 && pending_source != -1) begin
-                syn_valid[free_slot] <= 1'b1;
-                syn_source[free_slot] <= ID_W'(pending_source);
-                syn_weight[free_slot] <= 8'sd8;
-                syn_idle[free_slot] <= '0;
-                pending[pending_source] <= 1'b0;
+                // Post trace has its own clocking/decay path.
+                if (will_spike) begin
+                    if (post_trace != 8'hff)
+                        post_trace <= post_trace + 1'b1;
+                end else if (maintenance_tick && post_trace != 0) begin
+                    post_trace <= (post_trace > 8'd15)
+                                ? post_trace - (post_trace >> 4)
+                                : post_trace - 1'b1;
+                end
+
+                // Existing synapses refresh age and apply bounded STDP updates.
+                for (i = 0; i < FANIN; i = i + 1) begin
+                    if (syn_valid[i]) begin
+                        if (event_valid && syn_source[i] == event_source) begin
+                            syn_idle[i] <= '0;
+                        end else if (maintenance_tick &&
+                                     syn_idle[i] != IDLE_MAX) begin
+                            syn_idle[i] <= syn_idle[i] + 1'b1;
+                        end
+
+                        // Potentiation wins when pre- and post-updates coincide.
+                        if (will_spike && candidate_active[syn_source[i]]) begin
+                            if (syn_weight[i] < WEIGHT_MAX)
+                                syn_weight[i] <= syn_weight[i] + WEIGHT_W'(1);
+                        end else if (event_valid &&
+                                     syn_source[i] == event_source &&
+                                     post_trace != 0) begin
+                            if (syn_weight[i] > WEIGHT_MIN)
+                                syn_weight[i] <= syn_weight[i] - WEIGHT_W'(1);
+                        end
+
+                        if (maintenance_tick &&
+                            !(event_valid && syn_source[i] == event_source) &&
+                            syn_idle[i] >= PRUNE_AGE &&
+                            ((syn_weight[i] >= 0 &&
+                              syn_weight[i] < MIN_WEIGHT) ||
+                             (syn_weight[i] < 0 &&
+                              syn_weight[i] > -MIN_WEIGHT))) begin
+                            syn_valid[i] <= 1'b0;
+                            pending[syn_source[i]] <= 1'b0;
+                        end
+                    end
+                end
+
+                // A post-spike queues active unconnected sources for formation.
+                if (will_spike) begin
+                    for (i = 0; i < N; i = i + 1) begin
+                        if (i != PE_ID &&
+                            candidate_pre[i] >= FORM_THRESHOLD &&
+                            !connected_sources[i])
+                            pending[i] <= 1'b1;
+                    end
+                end
+
+                // Allocate at most one pending connection per cycle.
+                if (free_slot != -1 && pending_source != -1) begin
+                    syn_valid[free_slot] <= 1'b1;
+                    syn_source[free_slot] <= ID_W'(pending_source);
+                    syn_weight[free_slot] <= INITIAL_WEIGHT;
+                    syn_idle[free_slot] <= '0;
+                    pending[pending_source] <= 1'b0;
+                end
             end
         end
     end

@@ -1,0 +1,10 @@
+IO_LOC "\console.receiver.rx_pin_IBUF_O " IOT16A;
+IO_LOC "led_OBUF_O_1" IOL25B;
+IO_LOC "led_OBUF_O" IOL26B;
+IO_LOC "led_OBUF_O_2" IOL22B;
+IO_LOC "led_OBUF_O_3" IOL21B;
+IO_LOC "led_OBUF_O_4" IOL16B;
+IO_LOC "led_OBUF_O_5" IOL15A;
+IO_LOC "sys_clk_IBUF_I" IOR17A;
+IO_LOC "sys_rst_n_IBUF_I" IOL5A;
+IO_LOC "uart_tx_OBUF_O" IOB2A;

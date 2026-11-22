@@ -41,10 +41,10 @@
 
   <rect width="1600" height="1160" fill="#09121e"/>
   <text class="title" x="42" y="52">Inside one PE, and how the 16 PEs connect</text>
-  <text class="subtitle" x="44" y="80">A PE is one LIF neuron plus local traces, synapse slots, and learning logic.</text>
+  <text class="subtitle" x="44" y="80">The 16-PE view is the default architecture; the loaded 9K test uses two PEs.</text>
 
   <rect x="40" y="112" width="990" height="760" rx="18" class="panel"/>
-  <text x="64" y="147" class="section">One PE in detail (example: PE_ID = 7)</text>
+  <text x="64" y="147" class="section">One PE in detail (default example: PE_ID = 7)</text>
 
   <rect x="70" y="174" width="260" height="76" rx="11" class="event-box"/>
   <text x="88" y="202" class="section">Presynaptic event</text>
@@ -118,7 +118,7 @@
   <text x="70" y="842" class="small">Source IDs are unique per PE; self-connections are rejected by comparing against PE_ID.</text>
 
   <rect x="1050" y="112" width="510" height="760" rx="18" class="panel"/>
-  <text x="1074" y="147" class="section">Interconnection of 16 PEs</text>
+  <text x="1074" y="147" class="section">Default interconnection: 16 PEs</text>
 
   <rect x="1074" y="170" width="145" height="100" rx="10" class="event-box"/>
   <text x="1090" y="197" class="label">Event bus</text>
@@ -165,7 +165,7 @@
   <text x="1085" y="513" class="small">to decide whether the source is connected.</text>
 
   <rect x="1074" y="535" width="461" height="106" rx="11" class="inner"/>
-  <text x="1092" y="563" class="section">Logical edge example</text>
+  <text x="1092" y="563" class="section">Default-16 logical edge example</text>
   <text x="1092" y="589" class="mono">8 x EVENT 03 + TEACH 07</text>
   <text x="1092" y="615" class="label">PE 7 stores source=03, weight=+8 in a slot</text>
   <path d="M1102 674 H1260" class="arrow-logical"/>
@@ -177,18 +177,18 @@
   <text x="1386" y="693" class="tiny">in PE 7, not a wire</text>
 
   <rect x="1074" y="727" width="461" height="112" rx="11" class="inner"/>
-  <text x="1092" y="755" class="section">Readout and missing feedback</text>
-  <text x="1092" y="782" class="small">spikes[15:0] and counts[16] go to UART/LED status</text>
-  <text x="1092" y="807" class="small">No FIFO/router feeds spikes back as events</text>
-  <text x="1092" y="829" class="tiny">event_ready is tied high; no router backpressure</text>
+  <text x="1092" y="755" class="section">Readout and shared feedback</text>
+  <text x="1092" y="782" class="small">spikes[15:0] are queued and routed as events</text>
+  <text x="1092" y="807" class="small">Counts and spikes remain visible to UART/LED</text>
+  <text x="1092" y="829" class="tiny">event_ready backpressures input; overflow is sticky</text>
 
   <rect x="40" y="900" width="1520" height="205" rx="16" class="warning"/>
   <text x="64" y="936" font-size="21" font-weight="700" fill="#ffaaaa">Current implementation status</text>
   <text x="64" y="969" class="label">Simulation:</text>
   <text x="170" y="969" class="small">PE learning, training commands, READ count/spike status, and UART replies are tested.</text>
   <text x="64" y="998" class="label">Tang Nano 9K:</text>
-  <text x="170" y="998" class="small">full 16-PE UART top estimates 63,456 / 8,640 slices; placement fails, so no UART bitstream is loaded.</text>
-  <text x="64" y="1027" class="label">Previous image:</text>
-  <text x="170" y="1027" class="small">the fixed PE-7 smoke demo was programmed; it was not proof that all 16 PEs fit.</text>
+  <text x="170" y="998" class="small">N=2, W=4, idle=4 image routed at 1,716 / 8,640 slices and is programmed.</text>
+  <text x="64" y="1027" class="label">Default N=16:</text>
+  <text x="170" y="1027" class="small">full UART top estimates 63,456 / 8,640 slices and still fails placement.</text>
   <text x="64" y="1073" class="small">The PE graph is stored in registers. Physical FPGA logic is not rewired during learning.</text>
 </svg>

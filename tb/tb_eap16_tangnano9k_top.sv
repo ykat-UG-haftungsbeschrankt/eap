@@ -1,9 +1,16 @@
 `timescale 1ns/1ps
 
-module tb_eap16_tangnano9k_top;
+module tb_eap16_tangnano9k_top #(
+    parameter int N = 16,
+    parameter int EVENT_FIFO_DEPTH = 64,
+    parameter int WEIGHT_W = 8,
+    parameter int IDLE_W = 8
+);
     localparam int UART_CLOCK_HZ = 1_000_000;
     localparam int UART_BAUD_RATE = 62_500;
     localparam int UART_CLKS_PER_BIT = 16;
+    localparam logic [3:0] TRAIN_SOURCE = 4'd0;
+    localparam logic [3:0] TRAIN_PE = 4'(N - 1);
 
     logic sys_clk = 1'b0;
     logic sys_rst_n = 1'b0;
@@ -20,9 +27,13 @@ module tb_eap16_tangnano9k_top;
     always #5 sys_clk = ~sys_clk;
 
     eap16_tangnano9k_top #(
+        .N(N),
+        .EVENT_FIFO_DEPTH(EVENT_FIFO_DEPTH),
         .HEARTBEAT_DIV(8),
         .UART_CLOCK_HZ(UART_CLOCK_HZ),
-        .UART_BAUD_RATE(UART_BAUD_RATE)
+        .UART_BAUD_RATE(UART_BAUD_RATE),
+        .WEIGHT_W(WEIGHT_W),
+        .IDLE_W(IDLE_W)
     ) dut (
         .sys_clk(sys_clk),
         .sys_rst_n(sys_rst_n),
@@ -96,9 +107,57 @@ module tb_eap16_tangnano9k_top;
         end
     endtask
 
+    task automatic expect_byte(input logic [7:0] expected);
+        begin
+            wait (received_count > expected_index);
+            if (received_bytes[expected_index] !== expected)
+                $fatal(1, "UART byte mismatch at byte %0d", expected_index);
+            expected_index = expected_index + 1;
+        end
+    endtask
+
     task automatic expect_line(input string expected);
         begin
             expect_text(expected);
+            expect_crlf();
+        end
+    endtask
+
+    function automatic logic [7:0] decimal_tens(input logic [3:0] value);
+        decimal_tens = (value >= 4'd10) ? 8'h31 : 8'h30;
+    endfunction
+
+    function automatic logic [7:0] decimal_ones(input logic [3:0] value);
+        if (value >= 4'd10)
+            decimal_ones = 8'h30 + (value - 4'd10);
+        else
+            decimal_ones = 8'h30 + value;
+    endfunction
+
+    task automatic expect_event_ack(input logic [3:0] source);
+        begin
+            expect_text("OK EVENT ");
+            expect_byte(decimal_tens(source));
+            expect_byte(decimal_ones(source));
+            expect_crlf();
+        end
+    endtask
+
+    task automatic expect_teacher_ack(input logic [3:0] pe);
+        begin
+            expect_text("OK TEACH ");
+            expect_byte(decimal_tens(pe));
+            expect_byte(decimal_ones(pe));
+            expect_crlf();
+        end
+    endtask
+
+    task automatic expect_read_header(input logic [3:0] pe);
+        begin
+            expect_text("PE ");
+            expect_byte(decimal_tens(pe));
+            expect_byte(decimal_ones(pe));
+            expect_text(" COUNT 01 SPIKE 0");
             expect_crlf();
         end
     endtask
@@ -162,18 +221,18 @@ module tb_eap16_tangnano9k_top;
         expect_line("EVENT nn | TEACH nn | TICK | READ nn");
 
         repeat (8) begin
-            send_event(4'd3);
-            expect_line("OK EVENT 03");
+            send_event(TRAIN_SOURCE);
+            expect_event_ack(TRAIN_SOURCE);
         end
 
-        send_teacher(4'd7);
-        expect_line("OK TEACH 07");
+        send_teacher(TRAIN_PE);
+        expect_teacher_ack(TRAIN_PE);
         repeat (4) @(posedge dut.eap_clk);
         if (dut.selected_connection_count !== 5'd1)
             $fatal(1, "UART training did not form source 3 -> PE 7");
 
-        send_read(4'd7);
-        expect_line("PE 07 COUNT 01 SPIKE 0");
+        send_read(TRAIN_PE);
+        expect_read_header(TRAIN_PE);
         if (led[1] !== 1'b0 || led[2] !== 1'b0)
             $fatal(1, "active-low connection LEDs did not show one connection");
 
@@ -184,10 +243,10 @@ module tb_eap16_tangnano9k_top;
         send_uart_byte(8'h0d);
         send_uart_byte(8'h0a);
         expect_line("OK TICK");
-        send_teacher(4'd7);
-        expect_line("OK TEACH 07");
-        send_read(4'd7);
-        expect_line("PE 07 COUNT 01 SPIKE 0");
+        send_teacher(TRAIN_PE);
+        expect_teacher_ack(TRAIN_PE);
+        send_read(TRAIN_PE);
+        expect_read_header(TRAIN_PE);
 
         send_uart_byte(8'h45);
         send_uart_byte(8'h56);

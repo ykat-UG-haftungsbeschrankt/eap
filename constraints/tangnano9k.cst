@@ -1,23 +1,10 @@
-IO_LOC "sys_clk" 52;
-IO_PORT "sys_clk" IO_TYPE=LVCMOS33 PULL_MODE=UP;
-
-IO_LOC "sys_rst_n" 4;
-IO_PORT "sys_rst_n" PULL_MODE=UP;
-
-IO_LOC "uart_tx" 17;
-IO_PORT "uart_tx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
-IO_LOC "uart_rx" 18;
-IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
-
-IO_LOC "led[5]" 16;
-IO_PORT "led[5]" PULL_MODE=UP DRIVE=8;
-IO_LOC "led[4]" 15;
-IO_PORT "led[4]" PULL_MODE=UP DRIVE=8;
-IO_LOC "led[3]" 14;
-IO_PORT "led[3]" PULL_MODE=UP DRIVE=8;
-IO_LOC "led[2]" 13;
-IO_PORT "led[2]" PULL_MODE=UP DRIVE=8;
-IO_LOC "led[1]" 11;
-IO_PORT "led[1]" PULL_MODE=UP DRIVE=8;
-IO_LOC "led[0]" 10;
-IO_PORT "led[0]" PULL_MODE=UP DRIVE=8;
+IO_LOC "\console.receiver.rx_pin_IBUF_O " IOT16A;
+IO_LOC "led_OBUF_O_1" IOL25B;
+IO_LOC "led_OBUF_O" IOL26B;
+IO_LOC "led_OBUF_O_2" IOL22B;
+IO_LOC "led_OBUF_O_3" IOL21B;
+IO_LOC "led_OBUF_O_4" IOL16B;
+IO_LOC "led_OBUF_O_5" IOL15A;
+IO_LOC "sys_clk_IBUF_I" IOR17A;
+IO_LOC "sys_rst_n_IBUF_I" IOL5A;
+IO_LOC "uart_tx_OBUF_O" IOB2A;

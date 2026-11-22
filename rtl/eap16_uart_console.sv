@@ -1,4 +1,5 @@
 module eap16_uart_console #(
+    parameter int N = 16,
     parameter int UART_CLOCK_HZ = 13_500_000,
     parameter int UART_BAUD_RATE = 115_200
 ) (
@@ -7,16 +8,17 @@ module eap16_uart_console #(
     input  logic uart_rx_pin,
     output logic uart_tx_pin,
     output logic event_valid,
-    output logic [3:0] event_source,
+    output logic [$clog2(N)-1:0] event_source,
     input  logic event_ready,
-    output logic [15:0] teacher_spike,
+    output logic [N-1:0] teacher_spike,
     output logic maintenance_tick,
-    input  logic [79:0] packed_connection_counts,
-    input  logic [15:0] spikes,
+    input  logic [N*5-1:0] packed_connection_counts,
+    input  logic [N-1:0] spikes,
     output logic [3:0] status_pe
 );
     localparam int MAX_LINE = 32;
     localparam int MAX_REPLY = 38;
+    localparam int ID_W = $clog2(N);
 
     localparam logic [8*13-1:0] TEXT_EVENT =
         {"OK EVENT 00", 8'h0d, 8'h0a};
@@ -347,7 +349,7 @@ module eap16_uart_console #(
                      line_buffer[5] == 8'h20) begin
             parsed_id = parse_id(line_buffer[6], line_buffer[7],
                                  line_length == 6'd8);
-            if (parsed_id[4]) begin
+            if (parsed_id[4] && parsed_id[3:0] < N) begin
                 decoded_command = CMD_EVENT;
                 decoded_arg = parsed_id[3:0];
             end else begin
@@ -362,7 +364,7 @@ module eap16_uart_console #(
                      line_buffer[5] == 8'h20) begin
             parsed_id = parse_id(line_buffer[6], line_buffer[7],
                                  line_length == 6'd8);
-            if (parsed_id[4]) begin
+            if (parsed_id[4] && parsed_id[3:0] < N) begin
                 decoded_command = CMD_TEACH;
                 decoded_arg = parsed_id[3:0];
             end else begin
@@ -376,7 +378,7 @@ module eap16_uart_console #(
                      line_buffer[4] == 8'h20) begin
             parsed_id = parse_id(line_buffer[5], line_buffer[6],
                                  line_length == 6'd7);
-            if (parsed_id[4]) begin
+            if (parsed_id[4] && parsed_id[3:0] < N) begin
                 decoded_command = CMD_READ;
                 decoded_arg = parsed_id[3:0];
             end else begin
@@ -391,7 +393,7 @@ module eap16_uart_console #(
             response <= RESP_ERROR_SYNTAX;
             response_index <= '0;
             response_arg <= '0;
-            read_pe <= 4'd7;
+            read_pe <= '0;
             line_length <= '0;
             line_overflow <= 1'b0;
             line_uart_error <= 1'b0;
@@ -402,7 +404,7 @@ module eap16_uart_console #(
             event_source <= '0;
             teacher_spike <= '0;
             maintenance_tick <= 1'b0;
-            status_pe <= 4'd7;
+            status_pe <= '0;
             for (int i = 0; i < MAX_LINE; i++)
                 line_buffer[i] <= '0;
         end else begin
@@ -487,13 +489,13 @@ module eap16_uart_console #(
                         case (decoded_command)
                             CMD_EVENT: begin
                                 response_arg <= decoded_arg;
-                                event_source <= decoded_arg;
+                                event_source <= ID_W'(decoded_arg);
                                 event_valid <= 1'b1;
                                 state <= ST_WAIT_EVENT;
                             end
                             CMD_TEACH: begin
                                 response_arg <= decoded_arg;
-                                teacher_spike <= 16'b1 << decoded_arg;
+                                teacher_spike <= N'(1) << decoded_arg;
                                 status_pe <= decoded_arg;
                                 state <= ST_WAIT_TEACH;
                             end

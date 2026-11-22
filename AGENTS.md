@@ -27,7 +27,7 @@ connections. The current target is EAP-16, revision 0.2.
 6. Document parameter constraints and behavior at boundary values.
 7. For simultaneous events, define deterministic priority or explicitly
    combine deltas; do not rely on nonblocking assignment ordering by accident.
-8. Add `event_ready`/backpressure before integrating a real event source.
+8. Use explicit `event_ready`/backpressure for external event sources.
 9. Internal spikes must be queued; do not silently drop events.
 10. Keep a clear distinction between implemented behavior and planned behavior.
 
@@ -39,7 +39,8 @@ connections. The current target is EAP-16, revision 0.2.
 - Basic pair-based STDP-inspired weight adjustment.
 - Connection formation after repeated co-activity.
 - Weak-and-idle pruning.
-- A future shared event FIFO/arbiter for closed-loop operation.
+- A shared 64-entry event FIFO and round-robin arbiter for closed-loop
+  operation, with external backpressure and sticky feedback overflow status.
 
 ## Required validation before merge
 - Compile/lint with at least one SystemVerilog tool.
@@ -47,5 +48,9 @@ connections. The current target is EAP-16, revision 0.2.
 - Formation, potentiation, depression, saturation and pruning tests.
 - Simultaneous event/post-spike tests.
 - No self-connections and ID-zero correctness tests.
-- Closed-loop event FIFO overflow/backpressure tests when the router is added.
+- Closed-loop event FIFO ordering, overflow, and backpressure tests.
+- Learning-disable tests showing plastic state freezes while LIF and routing
+  continue.
+- Common-workload software/fixed-topology/EAP-16 simulation comparison after
+  changing the benchmarked neuron or routing behavior.
 - Record tool versions and commands in the commit or test report.

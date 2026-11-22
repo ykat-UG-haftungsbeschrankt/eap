@@ -3,12 +3,17 @@
 module tb_eap_dynamic_pe;
     logic clk = 1'b0;
     logic rst = 1'b1;
+    logic learning_enable = 1'b1;
     logic event_valid = 1'b0;
     logic [3:0] event_source = '0;
     logic teacher_spike = 1'b0;
     logic maintenance_tick = 1'b0;
     logic spike;
     logic [4:0] connection_count;
+    logic [7:0] frozen_candidate;
+    logic [7:0] frozen_post_trace;
+    logic [7:0] frozen_idle;
+    logic signed [7:0] frozen_weight;
 
     always #5 clk = ~clk;
 
@@ -23,6 +28,7 @@ module tb_eap_dynamic_pe;
     ) dut (
         .clk(clk),
         .rst(rst),
+        .learning_enable(learning_enable),
         .event_valid(event_valid),
         .event_source(event_source),
         .teacher_spike(teacher_spike),
@@ -153,6 +159,24 @@ module tb_eap_dynamic_pe;
         if (spike !== 1'b1 || dut.membrane !== 24'sd0)
             $fatal(1, "LIF threshold crossing did not spike and reset membrane");
         $display("PASS: LIF integration, threshold, and spike reset");
+
+        @(negedge clk);
+        learning_enable = 1'b0;
+        dut.syn_weight[0] = 8'sd20;
+        dut.syn_idle[0] = 8'd6;
+        frozen_candidate = dut.candidate_pre[0];
+        frozen_post_trace = dut.post_trace;
+        frozen_idle = dut.syn_idle[0];
+        frozen_weight = dut.syn_weight[0];
+        drive_cycle(1'b1, 4'd0, 1'b1, 1'b1);
+        if (spike !== 1'b1 || dut.candidate_pre[0] !== frozen_candidate ||
+            dut.post_trace !== frozen_post_trace ||
+            dut.syn_idle[0] !== frozen_idle ||
+            dut.syn_weight[0] !== frozen_weight)
+            $fatal(1, "disabled learning changed plastic state");
+        @(negedge clk);
+        learning_enable = 1'b1;
+        $display("PASS: learning disable freezes plastic state while LIF still spikes");
 
         $display("All eap_dynamic_pe tests passed.");
         $finish;
