@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+ */
+
 module uart_rx #(
     parameter int CLOCK_HZ = 13_500_000,
     parameter int BAUD_RATE = 115_200

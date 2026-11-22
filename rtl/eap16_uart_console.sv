@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+ */
+
 module eap16_uart_console #(
     parameter int N = 16,
     parameter int UART_CLOCK_HZ = 13_500_000,

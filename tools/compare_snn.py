@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+#
+# Permission for non-commercial use is hereby granted,
+# free of charge, without warranty of any kind.
+
 """Run seeded held-out classification trials and compare Gowin-mapped RTL."""
 
 from __future__ import annotations

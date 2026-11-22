@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+ */
+
 module bit_sequence_learner #(
     parameter int HISTORY_BITS = 4,
     parameter int CACHE_ENTRIES = 32

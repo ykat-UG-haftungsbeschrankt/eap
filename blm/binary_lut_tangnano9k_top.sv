@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+ */
+
 module blm_binary_lut_tangnano9k_top #(
     parameter int N = 16,
     parameter int EVENT_FIFO_DEPTH = 64,

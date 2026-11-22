@@ -1,3 +1,9 @@
+<!--
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" role="img" aria-labelledby="title description">
   <title id="title">EAP-16 implemented interfaces and functionality</title>
   <desc id="description">Diagram of the UART command path, shared event FIFO and spike-feedback path for the 16-PE EAP logic, Tang Nano 9K pins and LEDs, plus the current FPGA placement limitation.</desc>

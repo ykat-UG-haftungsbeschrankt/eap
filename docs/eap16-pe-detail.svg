@@ -1,3 +1,9 @@
+<!--
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1160" viewBox="0 0 1600 1160" role="img" aria-labelledby="title description">
   <title id="title">One EAP processing element and the 16-PE interconnect</title>
   <desc id="description">Detailed view of one PE's traces, dynamic synapse table, LIF state and learning rules, plus the shared event, teacher, maintenance, spike, and count interfaces across 16 PEs.</desc>

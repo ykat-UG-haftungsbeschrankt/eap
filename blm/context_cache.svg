@@ -1,3 +1,9 @@
+<!--
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" width="1480" height="860" viewBox="0 0 1480 860" role="img" aria-labelledby="title description">
   <title id="title">BLM context lookup: fully associative cache versus hashing</title>
   <desc id="description">The current BLM compares the full recent-bit context against every cache entry, then predicts on a hit or inserts with round-robin replacement on a miss. A separate panel shows an optional hash-indexed design that selects a small set before comparing full tags.</desc>
