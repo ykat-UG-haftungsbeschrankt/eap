@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" role="img" aria-labelledby="title description">
+  <title id="title">EAP-16 implemented interfaces and functionality</title>
+  <desc id="description">Diagram of the UART command path, open-loop 16-PE EAP logic, Tang Nano 9K pins and LEDs, plus the current FPGA placement limitation.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#57b7ff"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#5ed59a"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#ffbf69"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #e8eef7; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #aebdd0; }
+      .section { font-size: 18px; font-weight: 700; }
+      .label { font-size: 14px; fill: #c8d4e3; }
+      .small { font-size: 12px; fill: #aebdd0; }
+      .tiny { font-size: 11px; fill: #aebdd0; }
+      .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 13px; fill: #f1f5fa; }
+      .card { fill: #111e2e; stroke: #2d455f; stroke-width: 2; }
+      .inner { fill: #17283b; stroke: #38536f; stroke-width: 1.5; }
+      .pe { fill: #1b3148; stroke: #4a7298; stroke-width: 1.2; }
+      .warning { fill: #351f24; stroke: #f07878; stroke-width: 2; }
+      .ok { fill: #142c27; stroke: #5ed59a; stroke-width: 1.5; }
+      .line-blue { fill: none; stroke: #57b7ff; stroke-width: 3; marker-end: url(#arrow-blue); }
+      .line-green { fill: none; stroke: #5ed59a; stroke-width: 3; marker-end: url(#arrow-green); }
+      .line-orange { fill: none; stroke: #ffbf69; stroke-width: 3; marker-end: url(#arrow-orange); }
+      .muted-line { fill: none; stroke: #718198; stroke-width: 2; stroke-dasharray: 7 6; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1040" fill="#09121e"/>
+  <text class="title" x="42" y="52">EAP-16: implemented interfaces and data flow</text>
+  <text class="subtitle" x="44" y="80">RTL/UART simulation is implemented; the full UART-enabled 16-PE design is not placeable on the Tang Nano 9K.</text>
+
+  <rect x="1192" y="25" width="360" height="48" rx="12" class="warning"/>
+  <text x="1210" y="55" font-size="15" font-weight="700" fill="#ffaaaa">NO UART BITSTREAM LOADED</text>
+
+  <rect x="314" y="112" width="1240" height="600" rx="20" fill="#0d1927" stroke="#30455b" stroke-width="2"/>
+  <text x="338" y="143" class="section">Tang Nano 9K RTL top</text>
+
+  <rect x="42" y="254" width="235" height="220" rx="16" class="card"/>
+  <text x="64" y="286" class="section">Host terminal</text>
+  <text x="64" y="311" class="small">USB serial, 115200 baud, 8N1</text>
+  <rect x="62" y="330" width="195" height="118" rx="10" class="inner"/>
+  <text x="78" y="356" class="mono">EVENT 03</text>
+  <text x="78" y="380" class="mono">TEACH 07</text>
+  <text x="78" y="404" class="mono">TICK</text>
+  <text x="78" y="428" class="mono">READ 07</text>
+
+  <path d="M277 320 H350" class="line-blue"/>
+  <text x="284" y="305" class="tiny">UART RX</text>
+  <path d="M350 360 H277" class="line-green"/>
+  <text x="285" y="382" class="tiny">UART TX replies</text>
+
+  <rect x="348" y="164" width="300" height="92" rx="14" class="inner"/>
+  <text x="366" y="191" class="section">Clock and reset</text>
+  <text x="366" y="216" class="label">27 MHz input /2 = 13.5 MHz EAP clock</text>
+  <text x="366" y="239" class="small">Active-low reset; UART and PE logic share EAP clock</text>
+  <path d="M648 208 H680 V220 H704" class="line-blue"/>
+
+  <rect x="348" y="292" width="300" height="348" rx="14" class="card"/>
+  <text x="368" y="324" class="section">UART command console</text>
+  <text x="368" y="350" class="small">ASCII line parser + 8N1 RX/TX</text>
+  <rect x="368" y="369" width="260" height="154" rx="10" class="inner"/>
+  <text x="385" y="395" class="mono">EVENT nn</text>
+  <text x="385" y="419" class="small">one source event, nn = 00..15</text>
+  <text x="385" y="445" class="mono">TEACH nn</text>
+  <text x="385" y="469" class="mono">TICK</text>
+  <text x="385" y="493" class="mono">READ nn</text>
+  <text x="368" y="550" class="small">Replies: OK / ERR; READ returns PE count</text>
+  <text x="368" y="571" class="small">and current spike bit, not weights.</text>
+  <text x="368" y="604" class="tiny">Stop-and-wait: send the next line after its reply.</text>
+
+  <path d="M648 408 H704" class="line-orange"/>
+  <text x="652" y="392" class="tiny">event + teacher + tick</text>
+  <path d="M704 548 H648" class="line-green"/>
+  <text x="650" y="569" class="tiny">counts + spikes</text>
+
+  <rect x="704" y="164" width="484" height="476" rx="14" class="card"/>
+  <text x="726" y="196" class="section">eap16_top: 16 logical PEs</text>
+  <text x="726" y="220" class="small">One source event is broadcast; teacher_spike is per PE.</text>
+  <text x="726" y="242" class="small">event_ready is currently constant 1.</text>
+
+  <g>
+    <rect x="730" y="260" width="86" height="32" rx="8" class="pe"/><text x="754" y="282" class="label">PE 0</text>
+    <rect x="828" y="260" width="86" height="32" rx="8" class="pe"/><text x="852" y="282" class="label">PE 1</text>
+    <rect x="926" y="260" width="86" height="32" rx="8" class="pe"/><text x="950" y="282" class="label">PE 2</text>
+    <rect x="1024" y="260" width="86" height="32" rx="8" class="pe"/><text x="1045" y="282" class="label">... PE 15</text>
+  </g>
+
+  <rect x="730" y="310" width="432" height="232" rx="12" class="inner"/>
+  <text x="750" y="340" class="section">Per-PE implemented state</text>
+  <text x="750" y="368" class="label">LIF membrane: signed 24-bit; one-cycle spike output</text>
+  <text x="750" y="394" class="label">16 candidate pre-traces + one post-trace (8-bit)</text>
+  <text x="750" y="420" class="label">16 logical synapse slots:</text>
+  <text x="770" y="444" class="small">valid, 4-bit source, signed 8-bit weight, idle age</text>
+  <text x="750" y="474" class="label">Formation: active trace + post spike; new weight +8</text>
+  <text x="750" y="500" class="label">STDP-inspired +/-1 updates; bounded weights</text>
+  <text x="750" y="526" class="label">Weak-and-idle pruning on maintenance ticks</text>
+
+  <text x="730" y="578" class="label">Outputs: spikes[15:0] and 5-bit connection count per PE</text>
+  <path d="M1188 405 H1222" class="line-green"/>
+
+  <rect x="1222" y="254" width="300" height="210" rx="14" class="inner"/>
+  <text x="1242" y="286" class="section">Active-low LEDs</text>
+  <text x="1242" y="315" class="label">LED 0: heartbeat</text>
+  <text x="1242" y="341" class="label">LED 1: selected PE has a connection</text>
+  <text x="1242" y="367" class="label">LED 5:2: low four count bits</text>
+  <text x="1242" y="405" class="small">Selected PE = last TEACH or READ target</text>
+  <text x="1242" y="432" class="small">UART pin 17 TX / pin 18 RX</text>
+
+  <rect x="1222" y="484" width="300" height="156" rx="14" class="inner"/>
+  <text x="1242" y="515" class="section">Open-loop boundary</text>
+  <text x="1242" y="542" class="small">Spike outputs are read by UART,</text>
+  <text x="1242" y="563" class="small">not routed back as new events.</text>
+  <path d="M1242 584 H1498" class="muted-line"/>
+  <text x="1242" y="614" class="tiny">No event FIFO, arbiter, or spike-feedback router</text>
+
+  <rect x="42" y="744" width="1510" height="245" rx="16" class="warning"/>
+  <text x="66" y="780" font-size="21" font-weight="700" fill="#ffaaaa">Implementation and hardware status</text>
+  <rect x="66" y="805" width="440" height="132" rx="10" class="ok"/>
+  <text x="86" y="834" class="section">Simulation</text>
+  <text x="86" y="861" class="label">PE learning, boundary, LIF, and UART command</text>
+  <text x="86" y="885" class="label">tests pass, including train/read/tick flow.</text>
+  <text x="86" y="915" class="small">Synapses are logical register state, not fabric rewiring.</text>
+
+  <rect x="530" y="805" width="475" height="132" rx="10" fill="#302b1c" stroke="#ffbf69" stroke-width="1.5"/>
+  <text x="550" y="834" class="section">Tang Nano 9K placement</text>
+  <text x="550" y="861" class="label">Full UART-enabled 16-PE top: 63,456 / 8,640</text>
+  <text x="550" y="885" class="label">slices estimated; nextpnr cannot place it.</text>
+  <text x="550" y="915" class="small">No UART-enabled bitstream has been programmed.</text>
+
+  <rect x="1029" y="805" width="497" height="132" rx="10" class="inner"/>
+  <text x="1049" y="834" class="section">Last successful board image</text>
+  <text x="1049" y="861" class="label">Fixed source-3 to PE-7 smoke demo, not full 16-PE</text>
+  <text x="1049" y="885" class="label">operation. Constant wiring let synthesis prune unused PEs.</text>
+  <text x="1049" y="915" class="small">The current UART protocol is verified in simulation only.</text>
+
+  <text x="45" y="1020" class="tiny">Commands are stop-and-wait; full closed-loop event routing and real backpressure remain unimplemented.</text>
+</svg>

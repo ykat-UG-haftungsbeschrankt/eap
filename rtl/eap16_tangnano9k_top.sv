@@ -19,12 +19,6 @@ module eap16_tangnano9k_top #(
     logic [15:0] spikes;
     logic [79:0] packed_connection_counts;
     logic [4:0] selected_connection_count;
-    logic [3:0] debug_pe;
-    logic [3:0] debug_slot;
-    logic debug_valid;
-    logic [3:0] debug_source;
-    logic signed [7:0] debug_weight;
-    logic [7:0] debug_idle;
     logic [3:0] status_pe;
     logic [31:0] heartbeat_counter;
     logic heartbeat;
@@ -61,12 +55,6 @@ module eap16_tangnano9k_top #(
         .maintenance_tick(maintenance_tick),
         .packed_connection_counts(packed_connection_counts),
         .spikes(spikes),
-        .debug_pe(debug_pe),
-        .debug_slot(debug_slot),
-        .debug_valid(debug_valid),
-        .debug_source(debug_source),
-        .debug_weight(debug_weight),
-        .debug_idle(debug_idle),
         .status_pe(status_pe)
     );
 
@@ -80,15 +68,9 @@ module eap16_tangnano9k_top #(
         .event_source(event_source),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
-        .debug_pe(debug_pe),
-        .debug_slot(debug_slot),
         .event_ready(event_ready),
         .spikes(spikes),
-        .packed_connection_counts(packed_connection_counts),
-        .debug_valid(debug_valid),
-        .debug_source(debug_source),
-        .debug_weight(debug_weight),
-        .debug_idle(debug_idle)
+        .packed_connection_counts(packed_connection_counts)
     );
 
     always_ff @(posedge eap_clk) begin

@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1160" viewBox="0 0 1600 1160" role="img" aria-labelledby="title description">
+  <title id="title">One EAP processing element and the 16-PE interconnect</title>
+  <desc id="description">Detailed view of one PE's traces, dynamic synapse table, LIF state and learning rules, plus the shared event, teacher, maintenance, spike, and count interfaces across 16 PEs.</desc>
+  <defs>
+    <marker id="arrow-event" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#ffb85c"/>
+    </marker>
+    <marker id="arrow-control" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#65baff"/>
+    </marker>
+    <marker id="arrow-spike" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#62d6a0"/>
+    </marker>
+    <marker id="arrow-logical" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#c39bff"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #e8eef7; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #aebdd0; }
+      .section { font-size: 18px; font-weight: 700; }
+      .label { font-size: 14px; fill: #d3deeb; }
+      .small { font-size: 12px; fill: #aebdd0; }
+      .tiny { font-size: 11px; fill: #aebdd0; }
+      .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; fill: #f1f5fa; }
+      .panel { fill: #0e1a28; stroke: #30475f; stroke-width: 2; }
+      .card { fill: #132235; stroke: #38536f; stroke-width: 1.5; }
+      .event-box { fill: #302719; stroke: #ffb85c; stroke-width: 1.5; }
+      .control-box { fill: #15283b; stroke: #65baff; stroke-width: 1.5; }
+      .trace-box { fill: #17283b; stroke: #7594b4; stroke-width: 1.4; }
+      .state-box { fill: #193126; stroke: #62d6a0; stroke-width: 1.5; }
+      .pe-box { fill: #172a40; stroke: #4a7298; stroke-width: 1.1; }
+      .pe-target { fill: #302719; stroke: #ffb85c; stroke-width: 1.6; }
+      .arrow-event { fill: none; stroke: #ffb85c; stroke-width: 2.5; marker-end: url(#arrow-event); }
+      .arrow-control { fill: none; stroke: #65baff; stroke-width: 2.5; marker-end: url(#arrow-control); }
+      .arrow-spike { fill: none; stroke: #62d6a0; stroke-width: 2.5; marker-end: url(#arrow-spike); }
+      .arrow-logical { fill: none; stroke: #c39bff; stroke-width: 2.5; stroke-dasharray: 8 6; marker-end: url(#arrow-logical); }
+      .warning { fill: #351f24; stroke: #f07878; stroke-width: 1.8; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1160" fill="#09121e"/>
+  <text class="title" x="42" y="52">Inside one PE, and how the 16 PEs connect</text>
+  <text class="subtitle" x="44" y="80">A PE is one LIF neuron plus local traces, synapse slots, and learning logic.</text>
+
+  <rect x="40" y="112" width="990" height="760" rx="18" class="panel"/>
+  <text x="64" y="147" class="section">One PE in detail (example: PE_ID = 7)</text>
+
+  <rect x="70" y="174" width="260" height="76" rx="11" class="event-box"/>
+  <text x="88" y="202" class="section">Presynaptic event</text>
+  <text x="88" y="228" class="mono">event_valid + source ID (4-bit)</text>
+
+  <rect x="360" y="174" width="260" height="76" rx="11" class="control-box"/>
+  <text x="378" y="202" class="section">Teacher spike</text>
+  <text x="378" y="228" class="small">Can force this PE to spike</text>
+
+  <rect x="650" y="174" width="340" height="76" rx="11" class="control-box"/>
+  <text x="670" y="202" class="section">Maintenance tick</text>
+  <text x="670" y="228" class="small">Decays traces; advances idle ages</text>
+
+  <rect x="70" y="300" width="320" height="190" rx="12" class="trace-box"/>
+  <text x="90" y="330" class="section">Candidate pre-traces</text>
+  <text x="90" y="357" class="label">16 source IDs x 8 bits</text>
+  <text x="90" y="383" class="small">Non-self event increments that source's trace</text>
+  <text x="90" y="406" class="small">Saturates at 255; maintenance decays it</text>
+  <text x="90" y="454" class="small">ID 0 is valid; PE_ID events are excluded</text>
+
+  <rect x="430" y="300" width="270" height="190" rx="12" class="trace-box"/>
+  <text x="450" y="330" class="section">Pending allocator</text>
+  <text x="450" y="357" class="small">Post spike + trace >= 8 + not connected</text>
+  <text x="450" y="383" class="small">Queues an eligible source ID</text>
+  <text x="450" y="409" class="small">Lowest pending ID; at most 1 slot/cycle</text>
+  <text x="450" y="457" class="small">New slot starts at weight +8</text>
+
+  <rect x="720" y="300" width="270" height="190" rx="12" class="trace-box"/>
+  <text x="740" y="330" class="section">Post trace</text>
+  <text x="740" y="357" class="label">8-bit, saturates at 255</text>
+  <text x="740" y="383" class="small">Increments on any PE spike</text>
+  <text x="740" y="409" class="small">Decays on maintenance ticks</text>
+  <text x="740" y="457" class="small">Uses pre-update trace values</text>
+
+  <path d="M200 250 V300" class="arrow-event"/>
+  <path d="M310 250 V270 H535 V540 H500 V555" class="arrow-event"/>
+  <text x="538" y="522" class="tiny">event lookup</text>
+  <path d="M390 390 H430" class="arrow-event"/>
+  <text x="393" y="376" class="tiny">eligible source</text>
+  <path d="M565 490 V535 H460 V555" class="arrow-logical"/>
+  <text x="566" y="522" class="tiny">allocate</text>
+  <path d="M825 250 V300" class="arrow-control"/>
+  <text x="842" y="283" class="tiny">tick decay</text>
+  <path d="M620 212 V260 H705 V555" class="arrow-control"/>
+  <path d="M800 555 V490" class="arrow-spike"/>
+  <text x="808" y="520" class="tiny">spike</text>
+  <path d="M750 555 V525 H718 V430 H700" class="arrow-spike"/>
+  <text x="723" y="510" class="tiny">will_spike</text>
+
+  <rect x="70" y="555" width="450" height="260" rx="12" class="state-box"/>
+  <text x="90" y="586" class="section">Local synapse table (up to 16 slots)</text>
+  <text x="90" y="616" class="label">Each slot: valid | source ID | signed weight | idle age</text>
+  <text x="90" y="646" class="small">Matching event source selects its weight as current</text>
+  <text x="90" y="672" class="small">Recent post activity: pre-event depresses by 1</text>
+  <text x="90" y="698" class="small">Recent pre activity: post spike potentiates by 1</text>
+  <text x="90" y="724" class="small">Simultaneous eligible updates: potentiation wins</text>
+  <text x="90" y="750" class="small">Weights clamp to [-127, +127]; age saturates at 255</text>
+  <text x="90" y="786" class="small">Weak (|W| &lt; 2) + idle age >= 200: prune</text>
+
+  <rect x="570" y="555" width="420" height="260" rx="12" class="state-box"/>
+  <text x="590" y="586" class="section">LIF membrane / spike</text>
+  <text x="590" y="615" class="label">Signed 24-bit membrane V</text>
+  <text x="590" y="645" class="mono">V' = V - (V >>> 4) + current</text>
+  <text x="590" y="675" class="small">Spike if V' >= threshold or teacher pulse</text>
+  <text x="590" y="701" class="small">On spike: one-cycle pulse, V resets to 0</text>
+  <text x="590" y="757" class="label">Outputs: spike + connection count</text>
+  <text x="590" y="786" class="small">Count is exposed to the top-level</text>
+
+  <path d="M520 680 H570" class="arrow-event"/>
+  <text x="523" y="665" class="tiny">synaptic current</text>
+  <text x="70" y="842" class="small">Source IDs are unique per PE; self-connections are rejected by comparing against PE_ID.</text>
+
+  <rect x="1050" y="112" width="510" height="760" rx="18" class="panel"/>
+  <text x="1074" y="147" class="section">Interconnection of 16 PEs</text>
+
+  <rect x="1074" y="170" width="145" height="100" rx="10" class="event-box"/>
+  <text x="1090" y="197" class="label">Event bus</text>
+  <text x="1090" y="222" class="small">valid + source[3:0]</text>
+  <text x="1090" y="246" class="tiny">broadcast to all PEs</text>
+
+  <rect x="1232" y="170" width="145" height="100" rx="10" class="control-box"/>
+  <text x="1248" y="197" class="label">Teacher mask</text>
+  <text x="1248" y="222" class="small">teacher_spike[15:0]</text>
+  <text x="1248" y="246" class="tiny">one bit per PE</text>
+
+  <rect x="1390" y="170" width="145" height="100" rx="10" class="control-box"/>
+  <text x="1406" y="197" class="label">Maintenance</text>
+  <text x="1406" y="222" class="small">common tick</text>
+  <text x="1406" y="246" class="tiny">all PEs</text>
+
+  <path d="M1146 270 V305" class="arrow-event"/>
+  <path d="M1304 270 V305" class="arrow-control"/>
+  <path d="M1462 270 V305" class="arrow-control"/>
+
+  <g>
+    <rect x="1085" y="310" width="98" height="32" rx="7" class="pe-box"/><text x="1112" y="332" class="small">PE 0</text>
+    <rect x="1192" y="310" width="98" height="32" rx="7" class="pe-box"/><text x="1219" y="332" class="small">PE 1</text>
+    <rect x="1299" y="310" width="98" height="32" rx="7" class="pe-box"/><text x="1326" y="332" class="small">PE 2</text>
+    <rect x="1406" y="310" width="98" height="32" rx="7" class="pe-box"/><text x="1433" y="332" class="small">PE 3</text>
+
+    <rect x="1085" y="350" width="98" height="32" rx="7" class="pe-box"/><text x="1112" y="372" class="small">PE 4</text>
+    <rect x="1192" y="350" width="98" height="32" rx="7" class="pe-box"/><text x="1219" y="372" class="small">PE 5</text>
+    <rect x="1299" y="350" width="98" height="32" rx="7" class="pe-box"/><text x="1326" y="372" class="small">PE 6</text>
+    <rect x="1406" y="350" width="98" height="32" rx="7" class="pe-target"/><text x="1433" y="372" class="small">PE 7</text>
+
+    <rect x="1085" y="390" width="98" height="32" rx="7" class="pe-box"/><text x="1112" y="412" class="small">PE 8</text>
+    <rect x="1192" y="390" width="98" height="32" rx="7" class="pe-box"/><text x="1212" y="412" class="small">PE 9</text>
+    <rect x="1299" y="390" width="98" height="32" rx="7" class="pe-box"/><text x="1310" y="412" class="small">PE 10</text>
+    <rect x="1406" y="390" width="98" height="32" rx="7" class="pe-box"/><text x="1417" y="412" class="small">PE 11</text>
+
+    <rect x="1085" y="430" width="98" height="32" rx="7" class="pe-box"/><text x="1105" y="452" class="small">PE 12</text>
+    <rect x="1192" y="430" width="98" height="32" rx="7" class="pe-box"/><text x="1212" y="452" class="small">PE 13</text>
+    <rect x="1299" y="430" width="98" height="32" rx="7" class="pe-box"/><text x="1319" y="452" class="small">PE 14</text>
+    <rect x="1406" y="430" width="98" height="32" rx="7" class="pe-box"/><text x="1426" y="452" class="small">PE 15</text>
+  </g>
+
+  <text x="1085" y="492" class="small">Each PE sees each event, then uses its own table</text>
+  <text x="1085" y="513" class="small">to decide whether the source is connected.</text>
+
+  <rect x="1074" y="535" width="461" height="106" rx="11" class="inner"/>
+  <text x="1092" y="563" class="section">Logical edge example</text>
+  <text x="1092" y="589" class="mono">8 x EVENT 03 + TEACH 07</text>
+  <text x="1092" y="615" class="label">PE 7 stores source=03, weight=+8 in a slot</text>
+  <path d="M1102 674 H1260" class="arrow-logical"/>
+  <rect x="1074" y="657" width="105" height="46" rx="9" class="pe-box"/>
+  <text x="1096" y="686" class="label">source 3</text>
+  <rect x="1265" y="657" width="105" height="46" rx="9" class="pe-target"/>
+  <text x="1287" y="686" class="label">target 7</text>
+  <text x="1386" y="675" class="tiny">logical link stored</text>
+  <text x="1386" y="693" class="tiny">in PE 7, not a wire</text>
+
+  <rect x="1074" y="727" width="461" height="112" rx="11" class="inner"/>
+  <text x="1092" y="755" class="section">Readout and missing feedback</text>
+  <text x="1092" y="782" class="small">spikes[15:0] and counts[16] go to UART/LED status</text>
+  <text x="1092" y="807" class="small">No FIFO/router feeds spikes back as events</text>
+  <text x="1092" y="829" class="tiny">event_ready is tied high; no router backpressure</text>
+
+  <rect x="40" y="900" width="1520" height="205" rx="16" class="warning"/>
+  <text x="64" y="936" font-size="21" font-weight="700" fill="#ffaaaa">Current implementation status</text>
+  <text x="64" y="969" class="label">Simulation:</text>
+  <text x="170" y="969" class="small">PE learning, training commands, READ count/spike status, and UART replies are tested.</text>
+  <text x="64" y="998" class="label">Tang Nano 9K:</text>
+  <text x="170" y="998" class="small">full 16-PE UART top estimates 63,456 / 8,640 slices; placement fails, so no UART bitstream is loaded.</text>
+  <text x="64" y="1027" class="label">Previous image:</text>
+  <text x="170" y="1027" class="small">the fixed PE-7 smoke demo was programmed; it was not proof that all 16 PEs fit.</text>
+  <text x="64" y="1073" class="small">The PE graph is stored in registers. Physical FPGA logic is not rewired during learning.</text>
+</svg>

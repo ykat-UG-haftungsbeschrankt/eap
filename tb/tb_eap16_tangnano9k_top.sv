@@ -174,8 +174,6 @@ module tb_eap16_tangnano9k_top;
 
         send_read(4'd7);
         expect_line("PE 07 COUNT 01 SPIKE 0");
-        expect_line("SLOT 00 SRC 03 W 08 AGE 00");
-        expect_line("END");
         if (led[1] !== 1'b0 || led[2] !== 1'b0)
             $fatal(1, "active-low connection LEDs did not show one connection");
 
@@ -190,8 +188,6 @@ module tb_eap16_tangnano9k_top;
         expect_line("OK TEACH 07");
         send_read(4'd7);
         expect_line("PE 07 COUNT 01 SPIKE 0");
-        expect_line("SLOT 00 SRC 03 W 09 AGE 01");
-        expect_line("END");
 
         send_uart_byte(8'h45);
         send_uart_byte(8'h56);

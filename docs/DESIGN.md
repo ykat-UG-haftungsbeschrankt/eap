@@ -62,7 +62,9 @@ BRAM. This is the practical meaning of self-organizing hardware in this revision
 The current Tang Nano 9K implementation uses a 13.5 MHz EAP clock derived
 from the board's 27 MHz oscillator; this is the configured timing target for
 the current RTL, not a measured maximum-frequency result. UART RX/TX uses the
-same EAP clock at 115200 baud.
+same EAP clock at 115200 baud. The UART-enabled full 16-PE board design
+currently exceeds the GW1NR-9C slice capacity; the earlier fixed-demo bitstream
+was not evidence that all 16 PEs fit.
 
 ## Parameter and boundary behavior
 
@@ -130,7 +132,8 @@ Trace eligibility uses the pre-update trace values from that clock edge. If
 potentiation and depression are both eligible for the same synapse on a
 simultaneous event/spike, potentiation has priority; at +127 it holds rather
 than falling back to depression. Candidate/post trace increments take
-priority over maintenance decay on the corresponding event/spike.
+priority over maintenance decay on the corresponding event/spike. Valid source
+IDs are unique within each PE's synapse table.
 
 ## LIF update
 
@@ -164,7 +167,7 @@ parameters, self-connection exclusion, ID-zero connections, multi-source
 formation/allocation, potentiation, depression, simultaneous pre/post priority,
 signed weight saturation, weak-and-idle pruning, and LIF integration/threshold
 behavior. The Tang Nano 9K top accepts UART commands for events, teacher
-spikes, maintenance ticks, and connection-table readback.
+spikes, maintenance ticks, and per-PE connection-count/spike status readback.
 
 Remaining experiments:
 1. Train several patterns and measure connection creation, weight distribution,
@@ -175,5 +178,5 @@ Remaining experiments:
 
 Measure LUT, FF, BRAM, maximum clock, power, events/s, cycles/event,
 energy/event, learning convergence, retention and classification accuracy.
-These measurements are not yet included; simulation and the board smoke test
-do not establish them.
+These measurements are not yet included; simulation and the UART board
+interface do not establish them.

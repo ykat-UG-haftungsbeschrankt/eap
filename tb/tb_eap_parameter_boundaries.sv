@@ -25,13 +25,8 @@ module tb_eap_parameter_boundaries;
         .event_source(event_source),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
-        .debug_slot('0),
         .spike(spike),
-        .connection_count(connection_count),
-        .debug_valid(),
-        .debug_source(),
-        .debug_weight(),
-        .debug_idle()
+        .connection_count(connection_count)
     );
 
     task automatic drive_cycle(

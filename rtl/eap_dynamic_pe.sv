@@ -14,13 +14,8 @@ module eap_dynamic_pe #(
     input  logic [$clog2(N)-1:0] event_source,
     input  logic teacher_spike,
     input  logic maintenance_tick,
-    input  logic [((FANIN > 1) ? $clog2(FANIN) : 1)-1:0] debug_slot,
     output logic spike,
-    output logic [$clog2(FANIN+1)-1:0] connection_count,
-    output logic debug_valid,
-    output logic [$clog2(N)-1:0] debug_source,
-    output logic signed [7:0] debug_weight,
-    output logic [7:0] debug_idle
+    output logic [$clog2(FANIN+1)-1:0] connection_count
 );
 
     localparam int ID_W = $clog2(N);
@@ -30,14 +25,17 @@ module eap_dynamic_pe #(
     logic [7:0] syn_idle [0:FANIN-1];
 
     logic [7:0] candidate_pre [0:N-1];
+    logic [N-1:0] candidate_active;
     logic [7:0] post_trace;
     logic [N-1:0] pending;
     logic [N-1:0] connected_sources;
 
     logic signed [23:0] membrane;
     logic signed [23:0] syn_current;
+    logic signed [7:0] event_weight;
     logic signed [23:0] next_membrane;
     logic will_spike;
+    logic event_weight_found;
 
     integer i;
     integer free_slot;
@@ -46,43 +44,40 @@ module eap_dynamic_pe #(
 
     always_comb begin
         syn_current = '0;
+        event_weight = '0;
+        event_weight_found = 1'b0;
         free_slot = -1;
         pending_source = -1;
         count_tmp = 0;
         connected_sources = '0;
-        debug_valid = 1'b0;
-        debug_source = '0;
-        debug_weight = '0;
-        debug_idle = '0;
+        candidate_active = '0;
 
         for (int s = 0; s < FANIN; s++) begin
             if (syn_valid[s]) begin
                 count_tmp = count_tmp + 1;
                 connected_sources[syn_source[s]] = 1'b1;
-                if (event_valid && syn_source[s] == event_source) begin
-                    syn_current = syn_current + {{16{syn_weight[s][7]}}, syn_weight[s]};
+                // Formation keeps source IDs unique, so only one weight can match.
+                if (event_valid && syn_source[s] == event_source &&
+                    !event_weight_found) begin
+                    event_weight = syn_weight[s];
+                    event_weight_found = 1'b1;
                 end
             end else if (free_slot == -1) begin
                 free_slot = s;
             end
         end
 
+        for (int c = 0; c < N; c++)
+            candidate_active[c] = (candidate_pre[c] != 0);
+
         for (int p = 0; p < N; p++) begin
             if (pending[p] && pending_source == -1)
                 pending_source = p;
         end
 
-        if (debug_slot < FANIN) begin
-            debug_valid = syn_valid[debug_slot];
-            if (syn_valid[debug_slot]) begin
-                debug_source = syn_source[debug_slot];
-                debug_weight = syn_weight[debug_slot];
-                debug_idle = syn_idle[debug_slot];
-            end
-        end
-
         // With FANIN <= 16 and weights in [-127, 127], syn_current is
         // bounded to +/-2032 and the leak keeps this 24-bit update in range.
+        syn_current = {{16{event_weight[7]}}, event_weight};
         next_membrane = membrane - (membrane >>> 4) + syn_current;
         will_spike = teacher_spike || (event_valid && next_membrane >= THRESHOLD);
         connection_count = count_tmp[$clog2(FANIN+1)-1:0];
@@ -137,8 +132,8 @@ module eap_dynamic_pe #(
                             : post_trace - 1'b1;
             end
 
-            // Existing synapses: activity refreshes age. Basic STDP-inspired
-            // updates. The precise simultaneous-event rule remains to be tested.
+            // Existing synapses: activity refreshes age; simultaneous weight
+            // updates use explicit potentiation priority.
             for (i = 0; i < FANIN; i = i + 1) begin
                 if (syn_valid[i]) begin
                     if (event_valid && syn_source[i] == event_source) begin
@@ -148,7 +143,7 @@ module eap_dynamic_pe #(
                     end
 
                     // Potentiation has priority if pre- and post-updates coincide.
-                    if (will_spike && candidate_pre[syn_source[i]] != 0) begin
+                    if (will_spike && candidate_active[syn_source[i]]) begin
                         if (syn_weight[i] < 8'sd127)
                             syn_weight[i] <= syn_weight[i] + 1'b1;
                     end else if (event_valid && syn_source[i] == event_source &&

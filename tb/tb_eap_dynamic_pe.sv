@@ -27,13 +27,8 @@ module tb_eap_dynamic_pe;
         .event_source(event_source),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
-        .debug_slot('0),
         .spike(spike),
-        .connection_count(connection_count),
-        .debug_valid(),
-        .debug_source(),
-        .debug_weight(),
-        .debug_idle()
+        .connection_count(connection_count)
     );
 
     task automatic drive_cycle(
@@ -92,7 +87,8 @@ module tb_eap_dynamic_pe;
         $display("PASS: formation, ID zero, and one allocation per cycle");
 
         drive_cycle(1'b0, 4'd0, 1'b1, 1'b0);
-        if (dut.syn_weight[0] !== 8'sd9 || dut.syn_weight[1] !== 8'sd9)
+        if (dut.syn_weight[0] !== 8'sd9 || dut.syn_weight[1] !== 8'sd9 ||
+            connection_count !== 5'd2 || dut.pending[0] || dut.pending[3])
             $fatal(1, "postsynaptic activity did not potentiate active sources");
         drive_cycle(1'b1, 4'd0, 1'b0, 1'b0);
         if (dut.syn_weight[0] !== 8'sd8)

@@ -13,15 +13,31 @@ module eap16_uart_console #(
     output logic maintenance_tick,
     input  logic [79:0] packed_connection_counts,
     input  logic [15:0] spikes,
-    output logic [3:0] debug_pe,
-    output logic [3:0] debug_slot,
-    input  logic debug_valid,
-    input  logic [3:0] debug_source,
-    input  logic signed [7:0] debug_weight,
-    input  logic [7:0] debug_idle,
     output logic [3:0] status_pe
 );
     localparam int MAX_LINE = 32;
+    localparam int MAX_REPLY = 38;
+
+    localparam logic [8*13-1:0] TEXT_EVENT =
+        {"OK EVENT 00", 8'h0d, 8'h0a};
+    localparam logic [8*13-1:0] TEXT_TEACH =
+        {"OK TEACH 00", 8'h0d, 8'h0a};
+    localparam logic [8*9-1:0] TEXT_TICK =
+        {"OK TICK", 8'h0d, 8'h0a};
+    localparam logic [8*24-1:0] TEXT_READ =
+        {"PE 00 COUNT 00 SPIKE 0", 8'h0d, 8'h0a};
+    localparam logic [8*38-1:0] TEXT_HELP =
+        {"EVENT nn | TEACH nn | TICK | READ nn", 8'h0d, 8'h0a};
+    localparam logic [8*12-1:0] TEXT_SYNTAX =
+        {"ERR SYNTAX", 8'h0d, 8'h0a};
+    localparam logic [8*9-1:0] TEXT_ARGUMENT =
+        {"ERR ARG", 8'h0d, 8'h0a};
+    localparam logic [8*10-1:0] TEXT_LINE =
+        {"ERR LINE", 8'h0d, 8'h0a};
+    localparam logic [8*10-1:0] TEXT_BUSY =
+        {"ERR BUSY", 8'h0d, 8'h0a};
+    localparam logic [8*10-1:0] TEXT_UART =
+        {"ERR UART", 8'h0d, 8'h0a};
 
     typedef enum logic [2:0] {
         CMD_INVALID,
@@ -36,9 +52,7 @@ module eap16_uart_console #(
         RESP_EVENT,
         RESP_TEACH,
         RESP_TICK,
-        RESP_READ_HEADER,
-        RESP_READ_SLOT,
-        RESP_READ_END,
+        RESP_READ,
         RESP_HELP,
         RESP_ERROR_SYNTAX,
         RESP_ERROR_ARGUMENT,
@@ -53,8 +67,7 @@ module eap16_uart_console #(
         ST_WAIT_EVENT,
         ST_WAIT_TEACH,
         ST_WAIT_TICK,
-        ST_TX,
-        ST_READ_SCAN
+        ST_TX
     } state_t;
 
     state_t state;
@@ -62,7 +75,6 @@ module eap16_uart_console #(
     logic [5:0] response_index;
     logic [3:0] response_arg;
     logic [3:0] read_pe;
-    logic [3:0] read_slot;
     logic [4:0] read_count;
     logic read_spike;
 
@@ -84,7 +96,7 @@ module eap16_uart_console #(
     command_t decoded_command;
     response_t decode_error;
     logic [3:0] decoded_arg;
-    logic [6:0] parsed_decimal;
+    logic [4:0] parsed_id;
 
     function automatic logic [7:0] uppercase(input logic [7:0] value);
         if (value >= 8'h61 && value <= 8'h7a)
@@ -103,6 +115,26 @@ module eap16_uart_console #(
 
     function automatic logic is_line_end(input logic [7:0] value);
         is_line_end = value == 8'h0a || value == 8'h0d;
+    endfunction
+
+    function automatic logic [4:0] parse_id(
+        input logic [7:0] first_digit,
+        input logic [7:0] second_digit,
+        input logic two_digits
+    );
+        logic [6:0] value;
+        begin
+            parse_id = '0;
+            value = '0;
+            if (is_digit(first_digit) &&
+                (!two_digits || is_digit(second_digit))) begin
+                value = digit_value(first_digit);
+                if (two_digits)
+                    value = value * 7'd10 + digit_value(second_digit);
+                if (value <= 7'd15)
+                    parse_id = {1'b1, value[3:0]};
+            end
+        end
     endfunction
 
     function automatic logic [7:0] decimal_tens4(input logic [3:0] value);
@@ -127,21 +159,12 @@ module eap16_uart_console #(
             decimal_ones5 = 8'h30 + value;
     endfunction
 
-    function automatic logic [7:0] hex_digit(input logic [3:0] value);
-        if (value < 4'd10)
-            hex_digit = 8'h30 + value;
-        else
-            hex_digit = 8'h41 + (value - 4'd10);
-    endfunction
-
     function automatic logic [5:0] response_length(input response_t code);
         case (code)
             RESP_EVENT,
             RESP_TEACH:          response_length = 6'd13;
             RESP_TICK:           response_length = 6'd9;
-            RESP_READ_HEADER:    response_length = 6'd24;
-            RESP_READ_SLOT:      response_length = 6'd28;
-            RESP_READ_END:       response_length = 6'd5;
+            RESP_READ:           response_length = 6'd24;
             RESP_HELP:           response_length = 6'd38;
             RESP_ERROR_SYNTAX:   response_length = 6'd12;
             RESP_ERROR_ARGUMENT: response_length = 6'd9;
@@ -152,263 +175,105 @@ module eap16_uart_console #(
         endcase
     endfunction
 
+    function automatic logic [7:0] packed_text_byte(
+        input logic [8*MAX_REPLY-1:0] text,
+        input logic [5:0] length,
+        input logic [5:0] index
+    );
+        if (length != 0 && index < length)
+            packed_text_byte = text[(length - index)*8 - 1 -: 8];
+        else
+            packed_text_byte = 8'h00;
+    endfunction
+
     function automatic logic [7:0] response_character(
         input response_t code,
         input logic [5:0] index,
         input logic [3:0] argument,
         input logic [3:0] pe,
-        input logic [3:0] slot,
         input logic [4:0] count,
-        input logic spike_value,
-        input logic [3:0] source,
-        input logic signed [7:0] weight,
-        input logic [7:0] idle
+        input logic spike_value
     );
+        logic [8*MAX_REPLY-1:0] text;
+        logic [5:0] length;
         begin
-            response_character = 8'h00;
+            text = '0;
+            length = '0;
             case (code)
                 RESP_EVENT: begin
-                    case (index)
-                        0: response_character = 8'h4f;
-                        1: response_character = 8'h4b;
-                        2: response_character = 8'h20;
-                        3: response_character = 8'h45;
-                        4: response_character = 8'h56;
-                        5: response_character = 8'h45;
-                        6: response_character = 8'h4e;
-                        7: response_character = 8'h54;
-                        8: response_character = 8'h20;
-                        9: response_character = decimal_tens4(argument);
-                        10: response_character = decimal_ones4(argument);
-                        11: response_character = 8'h0d;
-                        12: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_EVENT;
+                    length = 6'd13;
                 end
                 RESP_TEACH: begin
-                    case (index)
-                        0: response_character = 8'h4f;
-                        1: response_character = 8'h4b;
-                        2: response_character = 8'h20;
-                        3: response_character = 8'h54;
-                        4: response_character = 8'h45;
-                        5: response_character = 8'h41;
-                        6: response_character = 8'h43;
-                        7: response_character = 8'h48;
-                        8: response_character = 8'h20;
-                        9: response_character = decimal_tens4(argument);
-                        10: response_character = decimal_ones4(argument);
-                        11: response_character = 8'h0d;
-                        12: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_TEACH;
+                    length = 6'd13;
                 end
                 RESP_TICK: begin
-                    case (index)
-                        0: response_character = 8'h4f;
-                        1: response_character = 8'h4b;
-                        2: response_character = 8'h20;
-                        3: response_character = 8'h54;
-                        4: response_character = 8'h49;
-                        5: response_character = 8'h43;
-                        6: response_character = 8'h4b;
-                        7: response_character = 8'h0d;
-                        8: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_TICK;
+                    length = 6'd9;
                 end
-                RESP_READ_HEADER: begin
-                    case (index)
-                        0: response_character = 8'h50;
-                        1: response_character = 8'h45;
-                        2: response_character = 8'h20;
-                        3: response_character = decimal_tens4(pe);
-                        4: response_character = decimal_ones4(pe);
-                        5: response_character = 8'h20;
-                        6: response_character = 8'h43;
-                        7: response_character = 8'h4f;
-                        8: response_character = 8'h55;
-                        9: response_character = 8'h4e;
-                        10: response_character = 8'h54;
-                        11: response_character = 8'h20;
-                        12: response_character = decimal_tens5(count);
-                        13: response_character = decimal_ones5(count);
-                        14: response_character = 8'h20;
-                        15: response_character = 8'h53;
-                        16: response_character = 8'h50;
-                        17: response_character = 8'h49;
-                        18: response_character = 8'h4b;
-                        19: response_character = 8'h45;
-                        20: response_character = 8'h20;
-                        21: response_character = spike_value ? 8'h31 : 8'h30;
-                        22: response_character = 8'h0d;
-                        23: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
-                end
-                RESP_READ_SLOT: begin
-                    case (index)
-                        0: response_character = 8'h53;
-                        1: response_character = 8'h4c;
-                        2: response_character = 8'h4f;
-                        3: response_character = 8'h54;
-                        4: response_character = 8'h20;
-                        5: response_character = decimal_tens4(slot);
-                        6: response_character = decimal_ones4(slot);
-                        7: response_character = 8'h20;
-                        8: response_character = 8'h53;
-                        9: response_character = 8'h52;
-                        10: response_character = 8'h43;
-                        11: response_character = 8'h20;
-                        12: response_character = decimal_tens4(source);
-                        13: response_character = decimal_ones4(source);
-                        14: response_character = 8'h20;
-                        15: response_character = 8'h57;
-                        16: response_character = 8'h20;
-                        17: response_character = hex_digit(weight[7:4]);
-                        18: response_character = hex_digit(weight[3:0]);
-                        19: response_character = 8'h20;
-                        20: response_character = 8'h41;
-                        21: response_character = 8'h47;
-                        22: response_character = 8'h45;
-                        23: response_character = 8'h20;
-                        24: response_character = hex_digit(idle[7:4]);
-                        25: response_character = hex_digit(idle[3:0]);
-                        26: response_character = 8'h0d;
-                        27: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
-                end
-                RESP_READ_END: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h4e;
-                        2: response_character = 8'h44;
-                        3: response_character = 8'h0d;
-                        4: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                RESP_READ: begin
+                    text = TEXT_READ;
+                    length = 6'd24;
                 end
                 RESP_HELP: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h56;
-                        2: response_character = 8'h45;
-                        3: response_character = 8'h4e;
-                        4: response_character = 8'h54;
-                        5: response_character = 8'h20;
-                        6: response_character = 8'h6e;
-                        7: response_character = 8'h6e;
-                        8: response_character = 8'h20;
-                        9: response_character = 8'h7c;
-                        10: response_character = 8'h20;
-                        11: response_character = 8'h54;
-                        12: response_character = 8'h45;
-                        13: response_character = 8'h41;
-                        14: response_character = 8'h43;
-                        15: response_character = 8'h48;
-                        16: response_character = 8'h20;
-                        17: response_character = 8'h6e;
-                        18: response_character = 8'h6e;
-                        19: response_character = 8'h20;
-                        20: response_character = 8'h7c;
-                        21: response_character = 8'h20;
-                        22: response_character = 8'h54;
-                        23: response_character = 8'h49;
-                        24: response_character = 8'h43;
-                        25: response_character = 8'h4b;
-                        26: response_character = 8'h20;
-                        27: response_character = 8'h7c;
-                        28: response_character = 8'h20;
-                        29: response_character = 8'h52;
-                        30: response_character = 8'h45;
-                        31: response_character = 8'h41;
-                        32: response_character = 8'h44;
-                        33: response_character = 8'h20;
-                        34: response_character = 8'h6e;
-                        35: response_character = 8'h6e;
-                        36: response_character = 8'h0d;
-                        37: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_HELP;
+                    length = 6'd38;
                 end
                 RESP_ERROR_SYNTAX: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h52;
-                        2: response_character = 8'h52;
-                        3: response_character = 8'h20;
-                        4: response_character = 8'h53;
-                        5: response_character = 8'h59;
-                        6: response_character = 8'h4e;
-                        7: response_character = 8'h54;
-                        8: response_character = 8'h41;
-                        9: response_character = 8'h58;
-                        10: response_character = 8'h0d;
-                        11: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_SYNTAX;
+                    length = 6'd12;
                 end
                 RESP_ERROR_ARGUMENT: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h52;
-                        2: response_character = 8'h52;
-                        3: response_character = 8'h20;
-                        4: response_character = 8'h41;
-                        5: response_character = 8'h52;
-                        6: response_character = 8'h47;
-                        7: response_character = 8'h0d;
-                        8: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
-                end
-                RESP_ERROR_BUSY: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h52;
-                        2: response_character = 8'h52;
-                        3: response_character = 8'h20;
-                        4: response_character = 8'h42;
-                        5: response_character = 8'h55;
-                        6: response_character = 8'h53;
-                        7: response_character = 8'h59;
-                        8: response_character = 8'h0d;
-                        9: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_ARGUMENT;
+                    length = 6'd9;
                 end
                 RESP_ERROR_LINE: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h52;
-                        2: response_character = 8'h52;
-                        3: response_character = 8'h20;
-                        4: response_character = 8'h4c;
-                        5: response_character = 8'h49;
-                        6: response_character = 8'h4e;
-                        7: response_character = 8'h45;
-                        8: response_character = 8'h0d;
-                        9: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_LINE;
+                    length = 6'd10;
+                end
+                RESP_ERROR_BUSY: begin
+                    text = TEXT_BUSY;
+                    length = 6'd10;
                 end
                 RESP_ERROR_UART: begin
-                    case (index)
-                        0: response_character = 8'h45;
-                        1: response_character = 8'h52;
-                        2: response_character = 8'h52;
-                        3: response_character = 8'h20;
-                        4: response_character = 8'h55;
-                        5: response_character = 8'h41;
-                        6: response_character = 8'h52;
-                        7: response_character = 8'h54;
-                        8: response_character = 8'h0d;
-                        9: response_character = 8'h0a;
-                        default: response_character = 8'h00;
-                    endcase
+                    text = TEXT_UART;
+                    length = 6'd10;
                 end
-                default: response_character = 8'h00;
+                default: begin
+                    text = '0;
+                    length = '0;
+                end
+            endcase
+
+            response_character = packed_text_byte(text, length, index);
+            case (code)
+                RESP_EVENT: begin
+                    if (index == 6'd9)
+                        response_character = decimal_tens4(argument);
+                    else if (index == 6'd10)
+                        response_character = decimal_ones4(argument);
+                end
+                RESP_TEACH: begin
+                    if (index == 6'd9)
+                        response_character = decimal_tens4(argument);
+                    else if (index == 6'd10)
+                        response_character = decimal_ones4(argument);
+                end
+                RESP_READ: begin
+                    if (index == 6'd3)
+                        response_character = decimal_tens4(pe);
+                    else if (index == 6'd4)
+                        response_character = decimal_ones4(pe);
+                    else if (index == 6'd12)
+                        response_character = decimal_tens5(count);
+                    else if (index == 6'd13)
+                        response_character = decimal_ones5(count);
+                    else if (index == 6'd21)
+                        response_character = spike_value ? 8'h31 : 8'h30;
+                end
+                default: begin
+                end
             endcase
         end
     endfunction
@@ -440,20 +305,14 @@ module eap16_uart_console #(
     always_comb begin
         read_count = packed_connection_counts[read_pe*5 +: 5];
         read_spike = spikes[read_pe];
-        debug_pe = read_pe;
-        debug_slot = read_slot;
         tx_valid = (state == ST_TX);
         tx_data = response_character(
             response,
             response_index,
-        response_arg,
+            response_arg,
             read_pe,
-            read_slot,
             read_count,
-            read_spike,
-            debug_source,
-            debug_weight,
-            debug_idle
+            read_spike
         );
     end
 
@@ -461,7 +320,7 @@ module eap16_uart_console #(
         decoded_command = CMD_INVALID;
         decode_error = RESP_ERROR_SYNTAX;
         decoded_arg = '0;
-        parsed_decimal = '0;
+        parsed_id = '0;
 
         if (line_uart_error) begin
             decode_error = RESP_ERROR_UART;
@@ -486,18 +345,11 @@ module eap16_uart_console #(
                      uppercase(line_buffer[3]) == 8'h4e &&
                      uppercase(line_buffer[4]) == 8'h54 &&
                      line_buffer[5] == 8'h20) begin
-            if (is_digit(line_buffer[6]) &&
-                (line_length == 6'd7 || is_digit(line_buffer[7]))) begin
-                parsed_decimal = (line_length == 6'd7)
-                               ? {3'b000, digit_value(line_buffer[6])}
-                               : {3'b000, digit_value(line_buffer[6])} * 7'd10 +
-                                 digit_value(line_buffer[7]);
-                if (parsed_decimal <= 7'd15) begin
-                    decoded_command = CMD_EVENT;
-                    decoded_arg = parsed_decimal[3:0];
-                end else begin
-                    decode_error = RESP_ERROR_ARGUMENT;
-                end
+            parsed_id = parse_id(line_buffer[6], line_buffer[7],
+                                 line_length == 6'd8);
+            if (parsed_id[4]) begin
+                decoded_command = CMD_EVENT;
+                decoded_arg = parsed_id[3:0];
             end else begin
                 decode_error = RESP_ERROR_ARGUMENT;
             end
@@ -508,18 +360,11 @@ module eap16_uart_console #(
                      uppercase(line_buffer[3]) == 8'h43 &&
                      uppercase(line_buffer[4]) == 8'h48 &&
                      line_buffer[5] == 8'h20) begin
-            if (is_digit(line_buffer[6]) &&
-                (line_length == 6'd7 || is_digit(line_buffer[7]))) begin
-                parsed_decimal = (line_length == 6'd7)
-                               ? {3'b000, digit_value(line_buffer[6])}
-                               : {3'b000, digit_value(line_buffer[6])} * 7'd10 +
-                                 digit_value(line_buffer[7]);
-                if (parsed_decimal <= 7'd15) begin
-                    decoded_command = CMD_TEACH;
-                    decoded_arg = parsed_decimal[3:0];
-                end else begin
-                    decode_error = RESP_ERROR_ARGUMENT;
-                end
+            parsed_id = parse_id(line_buffer[6], line_buffer[7],
+                                 line_length == 6'd8);
+            if (parsed_id[4]) begin
+                decoded_command = CMD_TEACH;
+                decoded_arg = parsed_id[3:0];
             end else begin
                 decode_error = RESP_ERROR_ARGUMENT;
             end
@@ -529,18 +374,11 @@ module eap16_uart_console #(
                      uppercase(line_buffer[2]) == 8'h41 &&
                      uppercase(line_buffer[3]) == 8'h44 &&
                      line_buffer[4] == 8'h20) begin
-            if (is_digit(line_buffer[5]) &&
-                (line_length == 6'd6 || is_digit(line_buffer[6]))) begin
-                parsed_decimal = (line_length == 6'd6)
-                               ? {3'b000, digit_value(line_buffer[5])}
-                               : {3'b000, digit_value(line_buffer[5])} * 7'd10 +
-                                 digit_value(line_buffer[6]);
-                if (parsed_decimal <= 7'd15) begin
-                    decoded_command = CMD_READ;
-                    decoded_arg = parsed_decimal[3:0];
-                end else begin
-                    decode_error = RESP_ERROR_ARGUMENT;
-                end
+            parsed_id = parse_id(line_buffer[5], line_buffer[6],
+                                 line_length == 6'd7);
+            if (parsed_id[4]) begin
+                decoded_command = CMD_READ;
+                decoded_arg = parsed_id[3:0];
             end else begin
                 decode_error = RESP_ERROR_ARGUMENT;
             end
@@ -554,7 +392,6 @@ module eap16_uart_console #(
             response_index <= '0;
             response_arg <= '0;
             read_pe <= 4'd7;
-            read_slot <= '0;
             line_length <= '0;
             line_overflow <= 1'b0;
             line_uart_error <= 1'b0;
@@ -666,9 +503,8 @@ module eap16_uart_console #(
                             end
                             CMD_READ: begin
                                 read_pe <= decoded_arg;
-                                read_slot <= '0;
                                 status_pe <= decoded_arg;
-                                response <= RESP_READ_HEADER;
+                                response <= RESP_READ;
                                 response_index <= '0;
                                 state <= ST_TX;
                             end
@@ -708,39 +544,10 @@ module eap16_uart_console #(
                         if (tx_ready) begin
                             if (response_index + 1'b1 >= response_length(response)) begin
                                 response_index <= '0;
-                                case (response)
-                                    RESP_READ_HEADER:
-                                        state <= ST_READ_SCAN;
-                                    RESP_READ_SLOT: begin
-                                        if (read_slot == 4'd15) begin
-                                            response <= RESP_READ_END;
-                                            state <= ST_TX;
-                                        end else begin
-                                            read_slot <= read_slot + 1'b1;
-                                            state <= ST_READ_SCAN;
-                                        end
-                                    end
-                                    RESP_READ_END:
-                                        state <= ST_COLLECT;
-                                    default:
-                                        state <= ST_COLLECT;
-                                endcase
+                                state <= ST_COLLECT;
                             end else begin
                                 response_index <= response_index + 1'b1;
                             end
-                        end
-                    end
-                    ST_READ_SCAN: begin
-                        if (debug_valid) begin
-                            response <= RESP_READ_SLOT;
-                            response_index <= '0;
-                            state <= ST_TX;
-                        end else if (read_slot == 4'd15) begin
-                            response <= RESP_READ_END;
-                            response_index <= '0;
-                            state <= ST_TX;
-                        end else begin
-                            read_slot <= read_slot + 1'b1;
                         end
                     end
                     default: begin

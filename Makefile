@@ -45,18 +45,13 @@ $(BUILD_DIR)/eap16_tangnano9k_synth.json: $(BOARD_RTL)
 	mkdir -p $(BUILD_DIR)
 	$(YOSYS) -Q -q -l $(BUILD_DIR)/yosys.log -p "read_verilog -sv $^; synth_gowin -top $(BOARD_TOP) -json $@"
 
-$(PNR_CST): $(BOARD_CST)
+$(BUILD_DIR)/eap16_tangnano9k_routed.json: $(BUILD_DIR)/eap16_tangnano9k_synth.json $(BOARD_CST)
 	mkdir -p $(BUILD_DIR)
-	cp $< $@
-
-$(PACK_CST): $(BOARD_CST)
-	mkdir -p $(BUILD_DIR)
-	cp $< $@
-
-$(BUILD_DIR)/eap16_tangnano9k_routed.json: $(BUILD_DIR)/eap16_tangnano9k_synth.json $(PNR_CST)
+	cp $(BOARD_CST) $(PNR_CST)
 	$(NEXTPNR) --json $< --write $@ --device $(DEVICE) --cst $(PNR_CST) --freq 13.5
 
-$(BUILD_DIR)/eap16_tangnano9k.fs: $(BUILD_DIR)/eap16_tangnano9k_routed.json $(PACK_CST)
+$(BUILD_DIR)/eap16_tangnano9k.fs: $(BUILD_DIR)/eap16_tangnano9k_routed.json $(BOARD_CST)
+	cp $(BOARD_CST) $(PACK_CST)
 	$(GOWIN_PACK) -d $(PACK_DEVICE) -s $(PACK_CST) -o $@ $<
 
 program: $(BUILD_DIR)/eap16_tangnano9k.fs
