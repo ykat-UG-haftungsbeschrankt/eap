@@ -31,11 +31,12 @@ GOWIN_SYNTH := $(BUILD_DIR)/binary_lut_pe_gowin.json
 GOWIN_PLACE := $(BUILD_DIR)/binary_lut_pe_placed.json
 GOWIN_REPORT := $(BUILD_DIR)/binary_lut_pe_report.json
 BOARD_SIM := $(BUILD_DIR)/tb_binary_lut_tangnano9k_top.vvp
+NETWORK_BENCH_SIM := $(BUILD_DIR)/tb_binary_lut_network_benchmark.vvp
 BOARD_SYNTH := $(BUILD_DIR)/binary_lut_tangnano9k_synth.json
 BOARD_ROUTED := $(BUILD_DIR)/binary_lut_tangnano9k_routed.json
 BOARD_BITSTREAM := $(BUILD_DIR)/binary_lut_tangnano9k.fs
 
-.PHONY: test benchmark fpga-check fpga-place board-bitstream board-program
+.PHONY: test benchmark network-benchmark fpga-check fpga-place board-bitstream board-program
 
 test: $(SIM_MIN) $(SIM_DEFAULT) $(SIM_MAX) $(SIM_EVICTION) \
       $(SIM_BINARY_PE) $(BOARD_SIM)
@@ -48,6 +49,9 @@ test: $(SIM_MIN) $(SIM_DEFAULT) $(SIM_MAX) $(SIM_EVICTION) \
 
 benchmark: $(BENCH_SIM)
 	$(VVP) $(BENCH_SIM)
+
+network-benchmark: $(NETWORK_BENCH_SIM)
+	$(VVP) $(NETWORK_BENCH_SIM)
 
 fpga-check:
 	$(YOSYS) -Q -q -p 'read_verilog -sv binary_lut_pe.sv; hierarchy -check -top binary_lut_pe; synth -top binary_lut_pe; check'
@@ -70,6 +74,10 @@ $(GOWIN_PLACE): $(GOWIN_SYNTH)
 $(BOARD_SIM): $(BOARD_RTL) tb_binary_lut_tangnano9k_top.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_tangnano9k_top -o $@ $^
+
+$(NETWORK_BENCH_SIM): ../rtl/eap16_event_router.sv binary_lut_pe.sv binary_lut_array.sv tb_binary_lut_network_benchmark.sv
+	mkdir -p $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_network_benchmark -o $@ $^
 
 $(BOARD_SYNTH): $(BOARD_RTL)
 	mkdir -p $(BUILD_DIR)

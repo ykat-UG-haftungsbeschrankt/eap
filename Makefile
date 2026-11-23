@@ -21,9 +21,13 @@ BENCHMARK_SEED ?= 1
 
 CORE_RTL := rtl/eap_dynamic_pe.sv rtl/eap16_event_router.sv rtl/eap16_top.sv
 COMPARISON_RTL := $(CORE_RTL) rtl/eap16_fixed_topology_top.sv
+BINARY_COMPARISON_RTL := rtl/eap16_event_router.sv \
+                         blm/binary_lut_pe.sv blm/binary_lut_array.sv
 COMPARISON_TB := $(BUILD_DIR)/tb_snn_comparison.vvp
+BINARY_COMPARISON_TB := $(BUILD_DIR)/tb_binary_lut_snn_comparison.vvp
 FIXED_COMPARISON_SYNTH := $(BUILD_DIR)/snn_fixed_topology_gowin.json
 ADAPTIVE_COMPARISON_SYNTH := $(BUILD_DIR)/snn_adaptive_eap16_gowin.json
+BINARY_COMPARISON_SYNTH := $(BUILD_DIR)/snn_binary_lut_gowin.json
 COMPARISON_TOPOLOGY_MASK := 256'h00f0000f00000000000000000000000000000000000000000000000000000000
 UART_RTL := rtl/uart_rx.sv rtl/uart_tx.sv rtl/eap16_uart_console.sv
 BOARD_RTL := $(CORE_RTL) $(UART_RTL) rtl/eap16_tangnano9k_top.sv
@@ -39,7 +43,7 @@ SYNTH_JSON := $(BUILD_DIR)/eap16_tangnano9k_$(WIDTH_TAG)_synth.json
 ROUTED_JSON := $(BUILD_DIR)/eap16_tangnano9k_$(WIDTH_TAG)_routed.json
 BITSTREAM := $(BUILD_DIR)/eap16_tangnano9k_$(WIDTH_TAG).fs
 
-.PHONY: all test benchmark bitstream program clean
+.PHONY: all test benchmark benchmark-networks bitstream program clean
 
 all: test
 
@@ -59,6 +63,19 @@ benchmark: $(COMPARISON_TB) $(FIXED_COMPARISON_SYNTH) $(ADAPTIVE_COMPARISON_SYNT
 	    --build-dir $(BUILD_DIR) --vvp $(VVP) \
 	    --trials $(BENCHMARK_TRIALS) --seed $(BENCHMARK_SEED)
 
+benchmark-networks: $(COMPARISON_TB) $(BINARY_COMPARISON_TB) \
+                    $(FIXED_COMPARISON_SYNTH) \
+                    $(ADAPTIVE_COMPARISON_SYNTH) \
+                    $(BINARY_COMPARISON_SYNTH)
+	$(PYTHON) tools/compare_binary_snn.py \
+	    --sim $(COMPARISON_TB) \
+	    --binary-sim $(BINARY_COMPARISON_TB) \
+	    --fixed-netlist $(FIXED_COMPARISON_SYNTH) \
+	    --adaptive-netlist $(ADAPTIVE_COMPARISON_SYNTH) \
+	    --binary-netlist $(BINARY_COMPARISON_SYNTH) \
+	    --build-dir $(BUILD_DIR) --vvp $(VVP) \
+	    --trials $(BENCHMARK_TRIALS) --seed $(BENCHMARK_SEED)
+
 $(BUILD_DIR)/tb_eap_dynamic_pe.vvp: rtl/eap_dynamic_pe.sv tb/tb_eap_dynamic_pe.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -s tb_eap_dynamic_pe -o $@ $^
@@ -75,6 +92,10 @@ $(COMPARISON_TB): $(COMPARISON_RTL) tb/tb_snn_comparison.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -s tb_snn_comparison -o $@ $^
 
+$(BINARY_COMPARISON_TB): $(BINARY_COMPARISON_RTL) tb/tb_binary_lut_snn_comparison.sv
+	mkdir -p $(BUILD_DIR)
+	$(IVERILOG) -g2012 -Wall -s tb_binary_lut_snn_comparison -o $@ $^
+
 $(FIXED_COMPARISON_SYNTH): rtl/eap16_event_router.sv rtl/eap16_fixed_topology_top.sv
 	mkdir -p $(BUILD_DIR)
 	$(YOSYS) -Q -q -l $(BUILD_DIR)/snn_fixed_topology_gowin.log -p "read_verilog -sv $^; chparam -set N 16 -set EVENT_FIFO_DEPTH 64 -set WEIGHT_W 8 -set THRESHOLD 100 -set FIXED_WEIGHT 8 -set TOPOLOGY_MASK $(COMPARISON_TOPOLOGY_MASK) eap16_fixed_topology_top; synth_gowin -top eap16_fixed_topology_top -json $@"
@@ -82,6 +103,11 @@ $(FIXED_COMPARISON_SYNTH): rtl/eap16_event_router.sv rtl/eap16_fixed_topology_to
 $(ADAPTIVE_COMPARISON_SYNTH): $(CORE_RTL)
 	mkdir -p $(BUILD_DIR)
 	$(YOSYS) -Q -q -l $(BUILD_DIR)/snn_adaptive_eap16_gowin.log -p "read_verilog -sv $^; chparam -set N 16 -set FANIN 16 -set EVENT_FIFO_DEPTH 64 -set WEIGHT_W 8 -set IDLE_W 8 -set THRESHOLD 100 eap16_top; synth_gowin -top eap16_top -json $@"
+
+$(BINARY_COMPARISON_SYNTH): $(BINARY_COMPARISON_RTL)
+	mkdir -p $(BUILD_DIR)
+	$(YOSYS) -Q -q -l $(BUILD_DIR)/snn_binary_lut_gowin.log \
+	    -p "read_verilog -sv $^; synth_gowin -top binary_lut_array -json $@"
 
 $(UART_TB): $(BOARD_RTL) tb/tb_eap16_tangnano9k_top.sv
 	mkdir -p $(BUILD_DIR)
@@ -114,16 +140,21 @@ clean:
 	      $(BUILD_DIR)/tb_eap_parameter_boundaries.vvp \
 	      $(BUILD_DIR)/tb_eap16_event_router.vvp \
 	      $(COMPARISON_TB) \
+	      $(BINARY_COMPARISON_TB) \
 	      $(BUILD_DIR)/snn_classification_seed_*.mem \
+	      $(BUILD_DIR)/snn_binary_classification_seed_*.mem \
 	      $(BUILD_DIR)/snn_classification_results.csv \
 	      $(BUILD_DIR)/snn_classification_trials.csv \
 	      $(BUILD_DIR)/snn_classification_cycle_trace.csv \
 	      $(BUILD_DIR)/snn_comparison_trace.csv \
+	      $(BUILD_DIR)/snn_binary_comparison_trials.csv \
 	      $(BUILD_DIR)/snn_synthesis_summary.csv \
 	      $(FIXED_COMPARISON_SYNTH) \
 	      $(ADAPTIVE_COMPARISON_SYNTH) \
+	      $(BINARY_COMPARISON_SYNTH) \
 	      $(BUILD_DIR)/snn_fixed_topology_gowin.log \
 	      $(BUILD_DIR)/snn_adaptive_eap16_gowin.log \
+	      $(BUILD_DIR)/snn_binary_lut_gowin.log \
 	      $(UART_TB) \
 	      $(SYNTH_JSON) \
 	      $(ROUTED_JSON) \

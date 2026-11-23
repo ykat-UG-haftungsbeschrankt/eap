@@ -65,27 +65,54 @@ cores use `N=16`, 8-bit weights, and a 64-entry shared event FIFO.
 
 With the default eight seeds (1–8), the software reference, fixed-topology RTL,
 and adaptive EAP-16 each classify 64/64 held-out patterns (100%; 32/32 per
-class). These results show that EAP-16 learned the intended mapping for this
-synthetic task, not that it outperforms the fixed baseline: the baseline is
-preconfigured with the correct, stable topology.
+class). `make benchmark-networks` adds the binary-LUT BLM network to the same
+task; it also classified 64/64 (100%; 32/32 per class). These results show that
+the adaptive networks learned the intended mapping for this synthetic task,
+not that they outperform the fixed baseline: it is preconfigured with the
+correct, stable topology.
 
-The same `make benchmark` command maps both network cores through Yosys
-`synth_gowin`. Current mapped primitive counts are:
+`make benchmark` maps the fixed and adaptive cores through Yosys `synth_gowin`;
+the three-way `make benchmark-networks` command maps the binary-LUT core as
+well. Latest mapped primitive counts for the three network cores are:
 
 | Model | LUT1–4 | MUX2_LUT | ALU | FF | RAM primitives | Mapped cells |
 |---|---:|---:|---:|---:|---:|---:|
-| Fixed topology | 1,408 | 474 | 1,200 | 543 | 4 | 3,753 |
-| Adaptive EAP-16 | 36,571 | 4,595 | 20,489 | 8,351 | 4 | 70,135 |
+| Fixed-topology SNN | 1,402 | 470 | 1,200 | 543 | 4 | 3,743 |
+| Adaptive EAP-16 | 36,746 | 4,825 | 20,469 | 8,351 | 4 | 70,520 |
+| Binary-LUT BLM | 3,049 | 648 | 1,168 | 687 | 4 | 5,681 |
 
-On this mapping, adaptive EAP-16 uses 25.97× the LUT1–4 cells and 15.38× the
-flip-flops (about +2,497% and +1,438%, respectively), for no accuracy gain on
-this oracle-topology task. This is a strong overhead for a static known mapping;
-the possible benefit on unknown or changing topologies is not measured here.
-The adaptive synthesis top keeps `learning_enable` as a runtime input; the
-board wrapper ties it high, so the freeze-control logic may optimize away in
-that integration. These are synthesis-mapped primitive counts, not placed
-area, timing, power, or energy results. The per-pattern scores, per-trial
-summary, cycle traces, and synthesis summary are written under `build/`.
+On this mapping, BLM uses about 2.17× the LUT1–4 cells and 1.27× the flip-flops
+of the oracle fixed network, while adaptive EAP-16 uses about 12.1× BLM's LUTs
+and flip-flops. All three tie on this task, which does not measure learning on
+unknown or changing topologies. Counts are for the network cores without the
+UART board wrapper, and are synthesis-mapped primitives—not placed area,
+timing, power, or energy results. The existing two-network `make benchmark`
+writes detailed cycle and trial results under `build/`; the three-network
+comparison writes `build/snn_binary_comparison_trials.csv`. It uses the same
+seeded task, verifies that BLM learned the expected feature edges, and freezes
+plasticity during held-out evaluation. The fixed-topology SNN is an oracle
+baseline with the correct edges prewired; these results cover this small
+synthetic task, not general SNN quality or a dense ANN.
+
+Default `make benchmark-networks` output:
+
+```text
+Task: seeded binary event-pattern classification; 8 trials, 64 held-out patterns.
+All models receive the same training/evaluation actions per seed; plasticity is frozen during evaluation.
+Fixed-topology SNN is an oracle baseline with the correct 8 edges wired in advance; EAP-16 and BLM learn those edges from teacher spikes.
+Classifier: larger spike count at PE 14/15 wins; ties count as wrong.
+  Model                         Correct   Accuracy   Mean/trial +/- SD
+  Fixed-topology SNN (RTL)       64/64   100.00%  100.00% +/- 0.00%
+  Adaptive EAP-16                64/64   100.00%  100.00% +/- 0.00%
+  Binary-LUT BLM                 64/64   100.00%  100.00% +/- 0.00%
+Gowin-mapped network primitive counts (synthesis only):
+  Model                         LUT1-4  MUX2_LUT   ALU   FFs   RAM  Cells
+  Fixed-topology SNN              1402       470  1200   543     4   3743
+  Adaptive EAP-16                36746      4825 20469  8351     4  70520
+  Binary-LUT BLM                  3049       648  1168   687     4   5681
+Primitive counts are not placement, timing, power, or area results. No physical event-rate or application-scale claim is made.
+Per-trial results: build/snn_binary_comparison_trials.csv
+```
 
 ## Network and synapse-width experiments
 

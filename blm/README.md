@@ -105,3 +105,63 @@ flip-flops; nextpnr-gowin 0.7 placed it at 215/8,640 slice sites. This
 top-level experiment exposes the synapse mask and membrane state for
 inspection. The no-route report has no timing result and does not establish
 how many PEs fit after adding a shared router.
+
+Run the 16-PE network benchmark with:
+
+```sh
+make -C blm network-benchmark
+```
+
+It checks ordered delivery of a saturated event burst and a teacher-supervised
+source-0-to-PE-1 connection followed by an induced spike and feedback event.
+It reports cycle-level router throughput and learning-path latency. These are
+RTL simulation measurements; do not interpret them as physical UART
+throughput or application accuracy.
+
+Latest run (Icarus Verilog 12.0): all 256 offered events were accepted and
+delivered in 257 cycles, with zero stalls or overflow (`0.996` broadcasts per
+cycle including startup and drain; the steady-state router limit is one
+broadcast per cycle). The supervised path formed source 0 to PE 1; three
+subsequent source-0 events produced one PE-1 spike 12 cycles after the initial
+candidate event, and that spike was routed back as one event.
+
+The full Tang Nano 9K top (16 PEs, shared FIFO, UART, and status logic) placed
+and routed at 6,045/8,640 slices (70.0%). nextpnr-gowin estimated a 14.59 MHz
+maximum for `eap_clk` against the 13.5 MHz constraint. At the constrained clock,
+one event broadcast per cycle corresponds to a theoretical 13.5 million
+network broadcasts/s (216 million PE-event updates/s across 16 PEs). This is
+derived from the RTL rate and timing estimate, not a measured board throughput
+or power result. The board heartbeat is active, but the UART hardware smoke
+test has not produced a reply; physical end-to-end operation remains
+unverified.
+
+## Compare against EAP-16 and fixed topology
+
+From the repository root, run `make benchmark-networks` to compare the binary
+LUT network, adaptive EAP-16, and the fixed-topology SNN on the same seeded
+event-pattern task. The default run uses eight seeds and scores eight held-out
+patterns per seed:
+
+```text
+Task: seeded binary event-pattern classification; 8 trials, 64 held-out patterns.
+All models receive the same training/evaluation actions per seed; plasticity is frozen during evaluation.
+Fixed-topology SNN is an oracle baseline with the correct 8 edges wired in advance; EAP-16 and BLM learn those edges from teacher spikes.
+Classifier: larger spike count at PE 14/15 wins; ties count as wrong.
+  Model                         Correct   Accuracy   Mean/trial +/- SD
+  Fixed-topology SNN (RTL)       64/64   100.00%  100.00% +/- 0.00%
+  Adaptive EAP-16                64/64   100.00%  100.00% +/- 0.00%
+  Binary-LUT BLM                 64/64   100.00%  100.00% +/- 0.00%
+Gowin-mapped network primitive counts (synthesis only):
+  Model                         LUT1-4  MUX2_LUT   ALU   FFs   RAM  Cells
+  Fixed-topology SNN              1402       470  1200   543     4   3743
+  Adaptive EAP-16                36746      4825 20469  8351     4  70520
+  Binary-LUT BLM                  3049       648  1168   687     4   5681
+Primitive counts are not placement, timing, power, or area results. No physical event-rate or application-scale claim is made.
+Per-trial results: build/snn_binary_comparison_trials.csv
+```
+
+The fixed-topology model is an oracle baseline with the correct connections
+prewired, so equal accuracy does not show that learning improves this task.
+The benchmark uses teacher-labeled training and a small synthetic workload;
+it is not a general SNN quality test or a comparison to a dense ANN. Primitive
+counts are for synthesis-mapped network cores, not placed area or timing.
