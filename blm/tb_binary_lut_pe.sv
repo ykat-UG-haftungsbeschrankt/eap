@@ -12,11 +12,9 @@ module tb_binary_lut_pe;
     logic rst = 1'b1;
     logic learning_enable = 1'b0;
     logic snapshot_pause = 1'b0;
-    logic snapshot_write_word0 = 1'b0;
-    logic snapshot_write_word1 = 1'b0;
-    logic [31:0] snapshot_write_data = '0;
-    logic [31:0] snapshot_read_word0;
-    logic [3:0] snapshot_read_word1;
+    logic snapshot_shift = 1'b0;
+    logic snapshot_in = 1'b0;
+    logic snapshot_out;
     logic event_valid = 1'b0;
     logic [3:0] event_source = '0;
     logic [15:0] event_source_mask;
@@ -42,11 +40,9 @@ module tb_binary_lut_pe;
         .rst(rst),
         .learning_enable(learning_enable),
         .snapshot_pause(snapshot_pause),
-        .snapshot_write_word0(snapshot_write_word0),
-        .snapshot_write_word1(snapshot_write_word1),
-        .snapshot_write_data(snapshot_write_data),
-        .snapshot_read_word0(snapshot_read_word0),
-        .snapshot_read_word1(snapshot_read_word1),
+        .snapshot_shift(snapshot_shift),
+        .snapshot_in(snapshot_in),
+        .snapshot_out(snapshot_out),
         .event_source_mask(event_source_mask),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),

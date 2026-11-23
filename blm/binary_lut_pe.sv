@@ -7,17 +7,16 @@
 
 module binary_lut_pe #(
     parameter int PE_ID = 0,
-    parameter int N = 16
+    parameter int N = 16,
+    parameter bit SNAPSHOT_ACCESS = 1'b0
 ) (
     input  logic clk,
     input  logic rst,
     input  logic learning_enable,
     input  logic snapshot_pause,
-    input  logic snapshot_write_word0,
-    input  logic snapshot_write_word1,
-    input  logic [31:0] snapshot_write_data,
-    output logic [2*N-1:0] snapshot_read_word0,
-    output logic [3:0] snapshot_read_word1,
+    input  logic snapshot_shift,
+    input  logic snapshot_in,
+    output logic snapshot_out,
     // Multiple source bits may be set; simultaneous events are combined.
     input  logic [N-1:0] event_source_mask,
     input  logic teacher_spike,
@@ -28,6 +27,7 @@ module binary_lut_pe #(
 );
     localparam logic [N-1:0] SELF_MASK = N'(1) << PE_ID;
     localparam logic [N-1:0] NONSELF_MASK = ~SELF_MASK;
+    localparam int PE_STATE_BITS = 2*(N - 1) + 4;
 
     logic [N-1:0] synapse_on;
     logic [N-1:0] synapse_next;
@@ -41,11 +41,32 @@ module binary_lut_pe #(
     logic synaptic_input;
     logic [1:0] membrane_next;
     logic will_spike;
+    logic [PE_STATE_BITS-1:0] scan_state;
+    logic [PE_STATE_BITS-1:0] scan_next;
+    logic scan_shift_active;
 
+    assign scan_shift_active =
+        SNAPSHOT_ACCESS && snapshot_pause && snapshot_shift;
+
+    // Pack only real state bits (excluding the permanently-zero self bit):
+    // [0 .. N-2]: non-self synapse_on
+    // [N-1 .. 2*(N-1)-1]: non-self candidate_pre
+    // [2*(N-1) +: 4]: {spike, post_recent, membrane_state}
     always @* begin
-        snapshot_read_word0 = {candidate_pre, synapse_on};
-        snapshot_read_word1 = {spike, post_recent, membrane_state};
+        int idx;
+        idx = 0;
+        for (int i = 0; i < N; i++) begin
+            if (i != PE_ID) begin
+                scan_state[idx] = synapse_on[i];
+                scan_state[(N - 1) + idx] = candidate_pre[i];
+                idx = idx + 1;
+            end
+        end
+        scan_state[2*(N - 1) +: 4] = {spike, post_recent, membrane_state};
+        scan_next = {scan_state[PE_STATE_BITS-2:0], snapshot_in};
     end
+
+    assign snapshot_out = SNAPSHOT_ACCESS ? scan_state[PE_STATE_BITS-1] : 1'b0;
 
     always @* begin
         source_match = event_source_mask;
@@ -63,9 +84,12 @@ module binary_lut_pe #(
             {N{will_spike}} & candidate_pre & NONSELF_MASK;
         depression_mask =
             {N{post_recent}} & pre_event_mask;
-        synapse_next = (synapse_on & ~depression_mask) | formation_mask;
+        synapse_next =
+            ((synapse_on & ~depression_mask) | formation_mask) &
+            NONSELF_MASK;
         candidate_pre_next =
-            (candidate_pre & {N{!maintenance_tick}}) | pre_event_mask;
+            ((candidate_pre & {N{!maintenance_tick}}) | pre_event_mask) &
+            NONSELF_MASK;
     end
 
     assign synapse_mask = synapse_on;
@@ -77,32 +101,37 @@ module binary_lut_pe #(
             synapse_on <= '0;
             post_recent <= 1'b0;
             candidate_pre <= '0;
-        end else begin
-            if (snapshot_write_word0) begin
-                synapse_on <= snapshot_write_data[N-1:0];
-                candidate_pre <= snapshot_write_data[2*N-1:N];
-            end else if (!snapshot_pause && learning_enable) begin
+        end else if (scan_shift_active) begin
+            int idx;
+            idx = 0;
+            for (int i = 0; i < N; i++) begin
+                if (i == PE_ID) begin
+                    synapse_on[i] <= 1'b0;
+                    candidate_pre[i] <= 1'b0;
+                end else begin
+                    synapse_on[i] <= scan_next[idx];
+                    candidate_pre[i] <= scan_next[(N - 1) + idx];
+                    idx = idx + 1;
+                end
+            end
+            membrane_state <= scan_next[2*(N - 1) +: 2];
+            post_recent <= scan_next[2*(N - 1) + 2];
+            spike <= scan_next[2*(N - 1) + 3];
+        end else if (!(SNAPSHOT_ACCESS && snapshot_pause)) begin
+            spike <= will_spike;
+            if (will_spike)
+                membrane_state <= 2'b00;
+            else
+                membrane_state <= membrane_next;
+
+            if (learning_enable) begin
                 synapse_on <= synapse_next;
                 candidate_pre <= candidate_pre_next;
-            end
 
-            if (snapshot_write_word1) begin
-                membrane_state <= snapshot_write_data[1:0];
-                post_recent <= snapshot_write_data[2];
-                spike <= snapshot_write_data[3];
-            end else if (!snapshot_pause) begin
-                spike <= will_spike;
                 if (will_spike)
-                    membrane_state <= 2'b00;
-                else
-                    membrane_state <= membrane_next;
-
-                if (learning_enable) begin
-                    if (will_spike)
-                        post_recent <= 1'b1;
-                    else if (maintenance_tick)
-                        post_recent <= 1'b0;
-                end
+                    post_recent <= 1'b1;
+                else if (maintenance_tick)
+                    post_recent <= 1'b0;
             end
         end
     end

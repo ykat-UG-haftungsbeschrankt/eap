@@ -15,29 +15,69 @@ rewiring the fabric.
 
 ## Binary-LUT BLM: model overview
 
-The default board design has 16 processing elements (PEs), each with one
-logical synapse bit per possible source and a two-bit membrane state. A
-combinational transition table advances or leaks the membrane state; a
-connected event at the high state produces a spike. Online learning uses
-per-source pre-activity flags and a recent-post flag: a postsynaptic spike
-forms links to active non-self sources, while a source event after recent post
-activity removes its link. Formation wins on a simultaneous update.
-`TEACH nn` can force a teacher spike. The shared event router queues external
-events and internal spike feedback. Unlike EAP-16, this experiment uses binary
-synapses and has no weak-connection pruning.
+Each BLM array has 16 processing elements (PEs) with one logical synapse bit
+per possible source and a two-bit membrane state. Connected events increment
+the membrane (`0 -> 1 -> 2`) and trigger a spike and reset from state 2; a
+maintenance tick leaks the membrane when no connected event arrives. Online
+learning uses per-source pre-activity flags (`candidate_pre`) and a
+`post_recent` flag: a postsynaptic spike forms links to flagged non-self
+sources, while a source event after recent post activity removes its link
+(formation wins on simultaneous update). `teacher_spike` forces a spike.
+
+Unlike EAP-16, the BLM arrays have **no round-robin router or event FIFO**:
+external events can target an individual PE (`event_target_pe`) or broadcast
+to all PEs (`event_broadcast`), while internal PE spikes combine directly into
+every PE's source mask as a multi-hot vector (`external_onehot | spikes`).
+Exact state save/restore uses a 1-bit serial scan chain across all non-self
+synapses, candidate flags, membrane states, `post_recent`, and `spike`
+registers (`34` bits/PE, `544` bits/network, **2,176 bits / 272 bytes** across
+the 4-network quad fabric).
 
 The `blm/` folder also contains a separate bounded-context bit-sequence
-predictor; it is not part of this BLM network or its board image. See
-[`blm/README.md`](blm/README.md) for the BLM experiments and their limitations.
+predictor; it is not part of the BLM spiking network or its board images. See
+[`blm/README.md`](blm/README.md) for full details and limitations.
 
 ![Binary-LUT BLM network and Tang Nano 9K UART data flow](docs/binary-lut-blm-overview.svg)
 
 ## Run the Binary-LUT BLM on a Tang Nano 9K
 
-Building the bitstream requires GNU Make, Yosys with `synth_gowin`,
+Building bitstreams requires GNU Make, Yosys with `synth_gowin`,
 `nextpnr-gowin`, and `gowin_pack`; programming also requires
 `openFPGALoader`. Install Icarus Verilog (`iverilog` and `vvp`) as well to run
-the BLM simulations. From the repository root:
+the BLM simulations. Two Tang Nano 9K board targets are provided:
+
+### Quad 4 × 16-PE BLM with binary UART & 272-byte snapshot (recommended)
+
+```sh
+make -C blm quad-board-test
+make -C blm quad-board-bitstream
+make -C blm quad-board-program
+```
+
+[`blm/binary_lut_quad_tangnano9k_top.sv`](blm/binary_lut_quad_tangnano9k_top.sv)
+wraps **4 independent 16-PE networks (64 PEs total)** with the minimal binary
+UART bridge [`blm/blm_uart_bridge.sv`](blm/blm_uart_bridge.sv) (115200 8N1,
+pin map in [`blm/tangnano9k_quad_binary_lut.cst`](blm/tangnano9k_quad_binary_lut.cst))
+and a 13.5 MHz core clock derived from the 27 MHz oscillator. The bitstream is
+written to `build/blm/binary_lut_quad_tangnano9k.fs`.
+
+Key binary UART commands (see [`blm/README.md`](blm/README.md) for the full
+table): `0x00` (`PING` -> `0x55`), `0x10..0x13` (select network `0..3`),
+`0x20`/`0x21` (learning off/on), `0x30 {pe, src}` (PE-addressed event),
+`0x31 {0, src}` (broadcast event), `0x40..0x4F` (teach PE `0..15`), `0x50`
+(maintenance tick), `0x60` (read & clear 16-bit latched spikes as 2 bytes),
+`0x70` (`SNAPSHOT_SAVE` -> streams 272 bytes non-destructively), and
+`0x71` + 272 bytes (`SNAPSHOT_LOAD` -> restores all 4 networks, replies
+`0x71`).
+
+**Quad hardware status:** synthesized (`synth_gowin -nowidelut`), placed,
+fully routed, and packed for the Tang Nano 9K at **8,422/8,640 slices (97%)**,
+10/274 IOBs, and **45.09 MHz** routed maximum for `eap_clk` against the
+13.5 MHz constraint. Full UART command, 4-network isolation, and 272-byte
+snapshot save/restore behavior is verified in RTL simulation; physical board
+UART testing has not yet been run.
+
+### Single 1 × 16-PE BLM with ASCII UART console
 
 ```sh
 make -C blm test
@@ -45,54 +85,21 @@ make -C blm board-bitstream
 make -C blm board-program
 ```
 
-The default image uses 16 PEs, a 64-entry event FIFO, and a 13.5 MHz core
-clock derived from the board's 27 MHz oscillator. The bitstream is written to
-`build/blm/binary_lut_tangnano9k.fs`; `board-program` loads it over JTAG with
-`openFPGALoader -b tangnano9k`. Programming is volatile, so repeat it after
-power is removed. Close any serial terminal before programming.
-The board pin assignments are in
-[`blm/tangnano9k_binary_lut.cst`](blm/tangnano9k_binary_lut.cst).
+[`blm/binary_lut_tangnano9k_top.sv`](blm/binary_lut_tangnano9k_top.sv) runs a
+single 16-PE array with the ASCII console (`EVENT nn`, `TEACH nn`, `TICK`,
+`READ nn`, `HELP` at 115200 8N1; pin map in
+[`blm/tangnano9k_binary_lut.cst`](blm/tangnano9k_binary_lut.cst)) and writes
+`build/blm/binary_lut_tangnano9k.fs`. Programming is volatile, so repeat it
+after power is removed and close any serial terminal before programming.
 
-### UART interface
+The active-low LEDs show a heartbeat on LED 0, whether the selected PE has any
+connections on LED 1, and the low four count bits on LEDs 5:2.
 
-After programming, connect to the Tang Nano 9K USB serial port using 115200
-baud, 8 data bits, no parity, and one stop bit (8N1). Send one ASCII command
-per line; the console accepts CR or LF line endings and replies with CRLF.
-Wait for each reply before sending the next command. IDs are decimal from 00
-through 15 for the default 16-PE image.
-
-| Command | Action | Successful reply |
-|---|---|---|
-| `EVENT nn` | Inject an event from source `nn`; waits for router readiness. | `OK EVENT nn` |
-| `TEACH nn` | Force a teacher spike at PE `nn`. | `OK TEACH nn` |
-| `TICK` | Apply one maintenance tick. | `OK TICK` |
-| `READ nn` | Select PE `nn` and read its connection count and current spike bit. | `PE nn COUNT nn SPIKE n` |
-| `HELP` | List the command syntax. | Command list |
-
-For example:
-
-```text
-HELP
-EVENT 00
-TEACH 01
-READ 01
-TICK
-```
-
-`READ` reports only the selected PE's total incoming connection count and
-current spike bit; it does not return individual source connections. An
-overlapping command is reported as `ERR BUSY`. The active-low LEDs show a
-heartbeat on LED 0, whether the selected PE has any connections on LED 1, and
-the low four count bits on LEDs 5:2. All LEDs turn on for a sticky event-router
-overflow fault, which clears on reset.
-
-**Hardware status:** the latest recorded BLM board place-and-route run used
-4,135 of 8,640 slice sites (47.9%) and estimated a 16.43 MHz maximum against
-the 13.5 MHz constraint. These are tool estimates, not measured board
-performance. The UART command, readback, and feedback path is covered by RTL
-simulation, but the latest hardware UART smoke test did not produce a reply;
-end-to-end UART operation on the board is therefore not yet verified. See
-[`blm/README.md`](blm/README.md) for the detailed report.
+**Single-network hardware status:** the latest build (`synth_gowin -nowidelut`)
+placed and fully routed at **2,103/8,640 slices (24%)** with a **45.12 MHz**
+routed maximum for `eap_clk` against the 13.5 MHz constraint. RTL simulation
+passes; physical UART smoke testing on the board remains unverified. See
+[`blm/README.md`](blm/README.md) for details.
 
 ## EAP-16 network
 
@@ -161,23 +168,25 @@ not that they outperform the fixed baseline: it is preconfigured with the
 correct, stable topology.
 
 `make benchmark` maps the fixed and adaptive cores through Yosys `synth_gowin`;
-the three-way `make benchmark-networks` command maps the binary-LUT core as
-well. Latest mapped primitive counts for the three network cores are:
+the three-way `make benchmark-networks` command maps the router-free binary-LUT
+core as well. Latest mapped primitive counts (default `synth_gowin`, without
+`-nowidelut`) for the three 16-PE network cores are:
 
 | Model | LUT1–4 | MUX2_LUT | ALU | FF | RAM primitives | Mapped cells |
 |---|---:|---:|---:|---:|---:|---:|
-| Fixed-topology SNN | 1,402 | 470 | 1,200 | 543 | 4 | 3,743 |
-| Adaptive EAP-16 | 36,746 | 4,825 | 20,469 | 8,351 | 4 | 70,520 |
-| Binary-LUT BLM | 2,523 | 728 | 528 | 687 | 4 | 4,599 |
+| Fixed-topology SNN | 894 | 403 | 978 | 554 | 4 | 2,957 |
+| Adaptive EAP-16 | 35,868 | 4,407 | 20,257 | 8,362 | 4 | 69,023 |
+| Binary-LUT BLM | 3,567 | 2,438 | 64 | 544 | 0 | 6,741 |
 
-On this mapping, BLM uses about 1.80× the LUT1–4 cells and 1.27× the
-flip-flops of the oracle fixed network, while adaptive EAP-16 uses about
-14.6× BLM's LUT1–4 cells and 12.2× its flip-flops. All three tie on this task,
-which does not measure learning on unknown or changing topologies. Counts are
-for the network cores without the UART board wrapper, and are
-synthesis-mapped primitives—not placed area, timing, power, or energy results.
-The existing two-network `make benchmark` writes detailed cycle and trial
-results under `build/`; the three-network comparison writes
+On this default synthesis mapping, BLM uses 544 flip-flops and 0 RAM
+primitives (no event FIFO), while adaptive EAP-16 uses about 10.1× BLM's
+LUT1–4 cells and 15.4× its flip-flops. (For Tang Nano 9K place-and-route, the
+`blm/` targets pass `synth_gowin -nowidelut` to avoid Gowin wide-LUT slice
+bloat.) All three tie on this task, which does not measure learning on unknown
+or changing topologies. Counts are for the network cores without the UART board
+wrapper, and are synthesis-mapped primitives—not placed area, timing, power, or
+energy results. The existing two-network `make benchmark` writes detailed cycle
+and trial results under `build/`; the three-network comparison writes
 `build/snn_binary_comparison_trials.csv`. It uses the same seeded task,
 verifies that BLM learned the expected feature edges, and freezes plasticity
 during held-out evaluation. The fixed-topology SNN is an oracle baseline with
@@ -197,9 +206,9 @@ Classifier: larger spike count at PE 14/15 wins; ties count as wrong.
   Binary-LUT BLM                 64/64   100.00%  100.00% +/- 0.00%
 Gowin-mapped network primitive counts (synthesis only):
   Model                         LUT1-4  MUX2_LUT   ALU   FFs   RAM  Cells
-  Fixed-topology SNN              1402       470  1200   543     4   3743
-  Adaptive EAP-16                36746      4825 20469  8351     4  70520
-  Binary-LUT BLM                  2523       728   528   687     4   4599
+  Fixed-topology SNN               894       403   978   554     4   2957
+  Adaptive EAP-16                35868      4407 20257  8362     4  69023
+  Binary-LUT BLM                  3567      2438    64   544     0   6741
 Primitive counts are not placement, timing, power, or area results. No physical event-rate or application-scale claim is made.
 Per-trial results: build/snn_binary_comparison_trials.csv
 ```
@@ -208,34 +217,35 @@ Per-trial results: build/snn_binary_comparison_trials.csv
 
 The parallel-capacity wrapper
 [`binary_lut_dual_array.sv`](blm/binary_lut_dual_array.sv) keeps its original
-name but now has a configurable `NETWORK_COUNT` (default 2). Each 16-PE array
-has its own valid/ready event input, FIFO, feedback path, learning enable,
-teacher mask, and synapse state. It also exposes a 32-bit snapshot map that
-can save and restore PE learning state, FIFO contents, pending feedback
-counts, and router control state. For area, the separate live synapse read mux
-is disabled by default; the snapshot map still contains every synapse. Set
-`SYNAPSE_READ_PORT=1` to enable the flat read port addressed as
-`network_id*256 + target_pe*16 + source_id`. Run the simultaneous-stream,
-learning-isolation, and snapshot round-trip checks with:
+name with configurable `NETWORK_COUNT` (default 4) and `N` PEs per array
+(default 16). Each array has its own PE-addressed/broadcast event input,
+teacher mask, learning enable, multi-hot peer spike broadcast, and synapse
+state. Exact snapshot/restore (`SNAPSHOT_ACCESS=1` by default) uses a 1-bit
+serial scan chain (**2,176 bits / 272 bytes** across four 16-PE arrays, with
+circular loopback on read and serial load on write) instead of wide
+random-access muxes. The separate live synapse read mux (`SYNAPSE_READ_PORT`)
+and connection counters (`CONNECTION_COUNTS`) are opt-in.
+
+A minimal binary UART bridge ([`blm_uart_bridge.sv`](blm/blm_uart_bridge.sv))
+and Tang Nano 9K wrapper
+([`binary_lut_quad_tangnano9k_top.sv`](blm/binary_lut_quad_tangnano9k_top.sv))
+expose all 4 × 16-PE networks (64 PEs total), network selection, addressed or
+broadcast events, teaching, ticks, latched spike readback, and 272-byte
+snapshot save/load over 115200 8N1 UART. Run the simulations and bitstream
+build with:
 
 ```sh
 make -C blm dual-network-test
+make -C blm quad-board-test
+make -C blm quad-board-bitstream
 ```
 
-The tests cover two and three networks. Each delivered 256 events in 257 cycles
-with no stalls: **1.992 aggregate broadcasts/cycle for two arrays**, and 2.988
-for three. A learning-isolation check confirmed that modifying network 0 did
-not alter network 1. Snapshot tests save the complete map, corrupt learned
-state, restore it, and compare the entire map for both configurations.
-
-The dual-network placement estimate includes snapshot support and disables the
-redundant flat synapse read mux by default. `make -C blm dual-network-estimate`
-places the current two-array core at **7,486/8,640 slices (86.6%)** with a
-31.25 MHz pre-route estimate against the 13.5 MHz constraint. This is
-placement-only; an unconstrained full-route attempt did not complete. The core
-has 187 top-level I/O bits and is not the Tang Nano board wrapper. The pin map,
-UART snapshot controls, and final board bitstream still need integration and
-validation.
+`make -C blm quad-board-bitstream` synthesizes (`synth_gowin -nowidelut`),
+places, **fully routes**, and packs the pin-constrained 4 × 16-PE UART
+snapshot design for the Tang Nano 9K at **8,422/8,640 slices (97%)**, 10/274
+IOBs, and **45.09 MHz** routed maximum for `eap_clk` against the 13.5 MHz
+constraint (`build/blm/binary_lut_quad_tangnano9k.fs`). Physical board UART
+testing remains separate.
 
 ## Network and synapse-width experiments
 
@@ -350,9 +360,17 @@ board top has not been placed or timing-closed with the router.
   UART commands, receive, and transmit.
 - [`rtl/eap16_tangnano9k_top.sv`](rtl/eap16_tangnano9k_top.sv) — board
   UART interface and LED status.
+- [`blm/binary_lut_pe.sv`](blm/binary_lut_pe.sv),
+  [`blm/binary_lut_array.sv`](blm/binary_lut_array.sv), and
+  [`blm/binary_lut_dual_array.sv`](blm/binary_lut_dual_array.sv) — router-free
+  Binary-LUT BLM PE, 16-PE array, and multi-network scan-chain snapshot fabric.
+- [`blm/blm_uart_bridge.sv`](blm/blm_uart_bridge.sv),
+  [`blm/binary_lut_quad_tangnano9k_top.sv`](blm/binary_lut_quad_tangnano9k_top.sv),
+  and [`blm/tangnano9k_quad_binary_lut.cst`](blm/tangnano9k_quad_binary_lut.cst)
+  — 4×16-PE Tang Nano 9K binary UART + 272-byte snapshot board top.
 - [`blm/binary_lut_tangnano9k_top.sv`](blm/binary_lut_tangnano9k_top.sv) and
-  [`blm/README.md`](blm/README.md) — separate Binary-LUT BLM board top and
-  learning experiments.
+  [`blm/README.md`](blm/README.md) — single-network 1×16-PE ASCII UART board
+  top and BLM documentation.
 - [`tb/`](tb) — self-checking SystemVerilog testbenches.
 - [`tb/tb_snn_comparison.sv`](tb/tb_snn_comparison.sv) and
   [`tools/compare_snn.py`](tools/compare_snn.py) — common-workload simulation

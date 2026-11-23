@@ -8,29 +8,31 @@
 `timescale 1ns/1ps
 
 module tb_binary_lut_dual_array #(
-    parameter int NETWORK_COUNT = 2
+    parameter int NETWORK_COUNT = 2,
+    parameter int N = 16
 );
-    localparam int N = 16;
     localparam int ID_W = $clog2(N);
     localparam int ADDR_W = $clog2(NETWORK_COUNT*N*N);
-    localparam int PE_STATE_WORDS = 2*N;
-    localparam int SNAPSHOT_WORDS = NETWORK_COUNT*PE_STATE_WORDS;
-    localparam int SNAPSHOT_ADDR_W = $clog2(SNAPSHOT_WORDS);
+    localparam int SNAPSHOT_BITS_PER_PE = 2*(N - 1) + 4;
+    localparam int SNAPSHOT_BITS_PER_NETWORK = N * SNAPSHOT_BITS_PER_PE;
+    localparam int SNAPSHOT_TOTAL_BITS =
+        NETWORK_COUNT * SNAPSHOT_BITS_PER_NETWORK;
     localparam int EVENT_COUNT = 256;
 
     logic clk = 1'b0;
     logic rst = 1'b1;
     logic [NETWORK_COUNT-1:0] learning_enable = '0;
     logic snapshot_pause = 1'b0;
-    logic [SNAPSHOT_ADDR_W-1:0] snapshot_state_addr = '0;
+    logic snapshot_shift_enable = 1'b0;
     logic snapshot_write_enable = 1'b0;
-    logic [31:0] snapshot_write_data = '0;
-    logic [31:0] snapshot_read_data;
-    logic snapshot_write_ready;
-    logic [31:0] saved_snapshot [0:SNAPSHOT_WORDS-1];
+    logic snapshot_write_data = 1'b0;
+    logic snapshot_read_data;
+    logic snapshot_ready;
+    logic [SNAPSHOT_TOTAL_BITS-1:0] saved_snapshot;
     logic [NETWORK_COUNT-1:0] event_valid = '0;
     logic [NETWORK_COUNT*ID_W-1:0] event_source = '0;
     logic [NETWORK_COUNT*ID_W-1:0] event_target_pe = '0;
+    logic [NETWORK_COUNT-1:0] event_broadcast = '0;
     logic [NETWORK_COUNT*ID_W-1:0] selected_pe = '0;
     logic [ADDR_W-1:0] synapse_read_addr = '0;
     logic synapse_read_data;
@@ -56,15 +58,16 @@ module tb_binary_lut_dual_array #(
         .clk(clk),
         .rst(rst),
         .snapshot_pause(snapshot_pause),
-        .snapshot_state_addr(snapshot_state_addr),
+        .snapshot_shift_enable(snapshot_shift_enable),
         .snapshot_write_enable(snapshot_write_enable),
         .snapshot_write_data(snapshot_write_data),
         .snapshot_read_data(snapshot_read_data),
-        .snapshot_write_ready(snapshot_write_ready),
+        .snapshot_ready(snapshot_ready),
         .learning_enable(learning_enable),
         .event_valid(event_valid),
         .event_source(event_source),
         .event_target_pe(event_target_pe),
+        .event_broadcast(event_broadcast),
         .selected_pe(selected_pe),
         .synapse_read_addr(synapse_read_addr),
         .synapse_read_data(synapse_read_data),
@@ -80,7 +83,9 @@ module tb_binary_lut_dual_array #(
             @(negedge clk);
             rst = 1'b1;
             snapshot_pause = 1'b0;
+            snapshot_shift_enable = 1'b0;
             snapshot_write_enable = 1'b0;
+            snapshot_write_data = 1'b0;
             learning_enable = learning;
             event_valid = '0;
             event_source = '0;
@@ -154,56 +159,63 @@ module tb_binary_lut_dual_array #(
 
     task automatic read_snapshot;
         begin
-            for (int word_index = 0;
-                 word_index < SNAPSHOT_WORDS;
-                 word_index++) begin
-                @(negedge clk);
-                snapshot_state_addr = SNAPSHOT_ADDR_W'(word_index);
+            @(negedge clk);
+            snapshot_write_enable = 1'b0;
+            snapshot_shift_enable = 1'b1;
+            for (int bit_index = 0;
+                 bit_index < SNAPSHOT_TOTAL_BITS;
+                 bit_index++) begin
                 #1;
-                saved_snapshot[word_index] = snapshot_read_data;
+                if (!snapshot_ready)
+                    $fatal(1, "snapshot read was not ready at bit %0d",
+                           bit_index);
+                saved_snapshot[bit_index] = snapshot_read_data;
+                @(posedge clk);
+                @(negedge clk);
             end
+            snapshot_shift_enable = 1'b0;
         end
     endtask
 
-    task automatic restore_snapshot;
+    task automatic write_snapshot(
+        input logic [SNAPSHOT_TOTAL_BITS-1:0] image
+    );
         begin
-            for (int word_index = 0;
-                 word_index < SNAPSHOT_WORDS;
-                 word_index++) begin
-                @(negedge clk);
-                snapshot_state_addr = SNAPSHOT_ADDR_W'(word_index);
-                snapshot_write_data = saved_snapshot[word_index];
-                snapshot_write_enable = 1'b1;
-                #1;
-                if (!snapshot_write_ready)
-                    $fatal(1, "snapshot restore was not ready at word %0d",
-                           word_index);
-                @(posedge clk);
-                #1;
-            end
             @(negedge clk);
+            snapshot_write_enable = 1'b1;
+            snapshot_shift_enable = 1'b1;
+            for (int bit_index = 0;
+                 bit_index < SNAPSHOT_TOTAL_BITS;
+                 bit_index++) begin
+                snapshot_write_data = image[bit_index];
+                #1;
+                if (!snapshot_ready)
+                    $fatal(1, "snapshot restore was not ready at bit %0d",
+                           bit_index);
+                @(posedge clk);
+                @(negedge clk);
+            end
+            snapshot_shift_enable = 1'b0;
             snapshot_write_enable = 1'b0;
+            snapshot_write_data = 1'b0;
         end
     endtask
 
     task automatic verify_snapshot;
         begin
-            for (int word_index = 0;
-                 word_index < SNAPSHOT_WORDS;
-                 word_index++) begin
-                @(negedge clk);
-                snapshot_state_addr = SNAPSHOT_ADDR_W'(word_index);
+            @(negedge clk);
+            snapshot_write_enable = 1'b0;
+            snapshot_shift_enable = 1'b1;
+            for (int bit_index = 0;
+                 bit_index < SNAPSHOT_TOTAL_BITS;
+                 bit_index++) begin
                 #1;
-                if (snapshot_read_data !== saved_snapshot[word_index])
-                    $fatal(1, "snapshot mismatch at word %0d", word_index);
-            end
-            if ((32'd1 << SNAPSHOT_ADDR_W) > SNAPSHOT_WORDS) begin
+                if (snapshot_read_data !== saved_snapshot[bit_index])
+                    $fatal(1, "snapshot mismatch at bit %0d", bit_index);
+                @(posedge clk);
                 @(negedge clk);
-                snapshot_state_addr = SNAPSHOT_ADDR_W'(SNAPSHOT_WORDS);
-                #1;
-                if (snapshot_read_data !== 32'b0 || snapshot_write_ready)
-                    $fatal(1, "invalid snapshot address did not return zero/not-ready");
             end
+            snapshot_shift_enable = 1'b0;
         end
     endtask
 
@@ -372,6 +384,7 @@ module tb_binary_lut_dual_array #(
         integer held_network;
         logic accepted;
         integer waits;
+        logic [SNAPSHOT_TOTAL_BITS-1:0] cleared_snapshot;
         begin
             reset_network({NETWORK_COUNT{1'b1}});
             target = target_pe(0);
@@ -380,6 +393,7 @@ module tb_binary_lut_dual_array #(
             teach_neuron(0, target);
             if (selected_connection_counts[0 +: 5] != 5'd1)
                 $fatal(1, "snapshot setup failed to learn source 0");
+            check_synapse(ADDR_W'(target*N), 1'b1);
 
             held_network = 1;
             @(negedge clk);
@@ -392,33 +406,29 @@ module tb_binary_lut_dual_array #(
             #1;
             if (event_ready !== '0)
                 $fatal(1, "pause did not backpressure PE inputs");
+            if (!snapshot_ready)
+                $fatal(1, "snapshot was not ready while paused");
 
+            // Non-destructive circular scan readback.
             read_snapshot();
-            $display("snapshot PE%0d words: %08x %08x",
-                     target, saved_snapshot[target*2],
-                     saved_snapshot[target*2 + 1]);
-            if (saved_snapshot[target*2][N-1:0] !== 16'h0001)
-                $fatal(1, "snapshot missed a learned synapse: %04x",
-                       saved_snapshot[target*2][N-1:0]);
-            if (!saved_snapshot[target*2][N])
-                $fatal(1, "snapshot missed the candidate pre-trace");
-            if (saved_snapshot[target*2 + 1][31:4] !== 28'b0)
-                $fatal(1, "snapshot PE-state padding bits were not zero");
+            if (saved_snapshot == '0)
+                $fatal(1, "snapshot readback was all zero");
+            check_synapse(ADDR_W'(target*N), 1'b1);
+            if (selected_connection_counts[0 +: 5] != 5'd1)
+                $fatal(1, "circular scan readback altered PE state");
 
-            @(negedge clk);
-            snapshot_state_addr = SNAPSHOT_ADDR_W'(target*2);
-            snapshot_write_data = saved_snapshot[target*2] ^ 32'b1;
-            snapshot_write_enable = 1'b1;
-            @(posedge clk);
-            #1;
-            @(negedge clk);
-            snapshot_write_enable = 1'b0;
-            snapshot_state_addr = SNAPSHOT_ADDR_W'(target*2);
-            #1;
-            if (snapshot_read_data[0] !== 1'b0)
-                $fatal(1, "snapshot test did not corrupt the target bit");
+            // Overwrite entire chain with zeros, verify corruption.
+            cleared_snapshot = '0;
+            write_snapshot(cleared_snapshot);
+            check_synapse(ADDR_W'(target*N), 1'b0);
+            if (selected_connection_counts[0 +: 5] != 5'd0)
+                $fatal(1, "snapshot write did not clear PE state");
 
-            restore_snapshot();
+            // Restore exact snapshot and verify bit-for-bit + live readback.
+            write_snapshot(saved_snapshot);
+            check_synapse(ADDR_W'(target*N), 1'b1);
+            if (selected_connection_counts[0 +: 5] != 5'd1)
+                $fatal(1, "snapshot restore did not recover learned synapse");
             verify_snapshot();
 
             @(negedge clk);
@@ -437,8 +447,8 @@ module tb_binary_lut_dual_array #(
             event_valid[held_network] = 1'b0;
 
             $display(
-                "Exact PE-state snapshot: saved/restored %0d words across %0d networks",
-                SNAPSHOT_WORDS, NETWORK_COUNT
+                "Exact scan-chain snapshot: saved/restored %0d bits across %0d networks",
+                SNAPSHOT_TOTAL_BITS, NETWORK_COUNT
             );
         end
     endtask
