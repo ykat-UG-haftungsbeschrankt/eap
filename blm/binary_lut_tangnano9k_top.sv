@@ -74,6 +74,12 @@ module blm_binary_lut_tangnano9k_top #(
     ) network (
         .clk(eap_clk),
         .rst(eap_rst),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data(),
+        .snapshot_write_ready(),
         .learning_enable(1'b1),
         .event_valid(event_valid),
         .event_source(event_source),

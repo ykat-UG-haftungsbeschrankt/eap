@@ -1,0 +1,126 @@
+<!--
+ * Copyright (c) 2026 ykat UG (haftungsbeschraenkt) - All Rights Reserved
+ *
+ * Permission for non-commercial use is hereby granted,
+ * free of charge, without warranty of any kind.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820" role="img" aria-labelledby="title description">
+  <title id="title">Binary-LUT BLM on the Tang Nano 9K</title>
+  <desc id="description">A serial terminal sends commands to the UART console. The console sends events through a shared FIFO and router to a 16-PE binary-LUT network. Spikes are queued as feedback events, while teacher and maintenance commands and selected-PE status connect to the console. Active-low LEDs report status.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#57b7ff"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#5ed59a"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#ffbf69"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#c6a0ff"/>
+    </marker>
+    <marker id="arrow-purple-start" markerWidth="10" markerHeight="10" refX="1" refY="5" orient="auto">
+      <path d="M10,0 L0,5 L10,10 Z" fill="#c6a0ff"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #e8eef7; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #aebdd0; }
+      .section { font-size: 18px; font-weight: 700; }
+      .label { font-size: 14px; fill: #d3deeb; }
+      .small { font-size: 12px; fill: #aebdd0; }
+      .tiny { font-size: 11px; fill: #aebdd0; }
+      .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; fill: #f1f5fa; }
+      .board { fill: #0c1724; stroke: #39536d; stroke-width: 2; }
+      .card { fill: #111e2e; stroke: #2d455f; stroke-width: 2; }
+      .inner { fill: #17283b; stroke: #38536f; stroke-width: 1.5; }
+      .line-blue { fill: none; stroke: #57b7ff; stroke-width: 3; marker-end: url(#arrow-blue); }
+      .line-green { fill: none; stroke: #5ed59a; stroke-width: 3; marker-end: url(#arrow-green); }
+      .line-orange { fill: none; stroke: #ffbf69; stroke-width: 3; marker-end: url(#arrow-orange); }
+      .line-purple { fill: none; stroke: #c6a0ff; stroke-width: 3; marker-end: url(#arrow-purple); }
+      .line-purple-both { fill: none; stroke: #c6a0ff; stroke-width: 3; marker-start: url(#arrow-purple-start); marker-end: url(#arrow-purple); }
+    </style>
+  </defs>
+
+  <rect width="1400" height="820" fill="#08111d"/>
+  <text class="title" x="40" y="52">Binary-LUT BLM on the Tang Nano 9K</text>
+  <text class="subtitle" x="40" y="82">16 logical PEs, a shared event router, online binary connectivity, and a line-based UART console</text>
+
+  <rect class="card" x="35" y="300" width="220" height="205" rx="14"/>
+  <text class="section" x="58" y="335">Host terminal</text>
+  <text class="small" x="58" y="360">115200 baud, 8N1</text>
+  <text class="mono" x="58" y="393">EVENT nn / TEACH nn</text>
+  <text class="mono" x="58" y="416">TICK / READ nn / HELP</text>
+  <text class="small" x="58" y="458">ASCII commands and replies</text>
+  <text class="small" x="58" y="479">Replies end with CRLF</text>
+
+  <rect class="board" x="290" y="125" width="1075" height="625" rx="18"/>
+  <text class="section" x="320" y="164">Tang Nano 9K board top</text>
+  <text class="small" x="320" y="189">27 MHz oscillator divided to 13.5 MHz core clock | default N=16, FIFO depth=64</text>
+
+  <rect class="card" x="330" y="250" width="240" height="255" rx="14"/>
+  <text class="section" x="352" y="285">UART console</text>
+  <text class="small" x="352" y="312">8N1 RX/TX, 115200 baud</text>
+  <text class="small" x="352" y="344">Parses one command at a time</text>
+  <text class="small" x="352" y="371">EVENT: source + valid</text>
+  <text class="small" x="352" y="398">Waits for router ready</text>
+  <text class="small" x="352" y="432">TEACH / TICK controls</text>
+  <text class="small" x="352" y="459">READ selected PE status</text>
+  <text class="small" x="352" y="482">Sends ASCII response lines</text>
+
+  <rect class="card" x="650" y="285" width="250" height="205" rx="14"/>
+  <text class="section" x="672" y="320">Shared event router</text>
+  <text class="small" x="672" y="348">64-entry FIFO and arbiter</text>
+  <text class="small" x="672" y="375">Queues external events and</text>
+  <text class="small" x="672" y="395">pending PE spike feedback</text>
+  <text class="small" x="672" y="428">Broadcasts source ID to PEs</text>
+  <text class="small" x="672" y="455">Ready / sticky overflow status</text>
+
+  <rect class="card" x="980" y="220" width="350" height="365" rx="14"/>
+  <text class="section" x="1002" y="255">16 x binary-LUT PEs</text>
+  <text class="small" x="1002" y="280">Each PE stores logical incoming connections</text>
+
+  <rect class="inner" x="1000" y="300" width="310" height="58" rx="9"/>
+  <text class="label" x="1018" y="325">16-bit synapse mask</text>
+  <text class="small" x="1018" y="345">one bit per source ID; self-links excluded</text>
+
+  <rect class="inner" x="1000" y="370" width="310" height="58" rx="9"/>
+  <text class="label" x="1018" y="395">2-bit membrane state + transition LUT</text>
+  <text class="small" x="1018" y="415">connected events advance; ticks can leak</text>
+
+  <rect class="inner" x="1000" y="440" width="310" height="58" rx="9"/>
+  <text class="label" x="1018" y="465">Pre-activity flags + recent-post flag</text>
+  <text class="small" x="1018" y="485">online connection formation and removal</text>
+
+  <text class="small" x="1002" y="530">Teacher spike or threshold crossing emits a spike</text>
+  <text class="small" x="1002" y="554">Spikes return to the router as queued events</text>
+
+  <rect class="card" x="980" y="605" width="350" height="115" rx="14"/>
+  <text class="section" x="1002" y="638">Active-low status LEDs</text>
+  <text class="small" x="1002" y="663">LED 0: heartbeat | LED 1: selected PE connected</text>
+  <text class="small" x="1002" y="684">LEDs 5:2: low count bits | all on: overflow</text>
+  <text class="tiny" x="1002" y="704">Overflow is sticky until reset</text>
+
+  <path class="line-blue" d="M255,355 C282,340 305,330 330,330"/>
+  <text class="tiny" x="265" y="315">UART RX commands</text>
+  <path class="line-green" d="M330,445 C303,464 280,464 255,448"/>
+  <text class="tiny" x="265" y="490">UART TX replies</text>
+
+  <path class="line-blue" d="M570,365 L650,365"/>
+  <text class="tiny" x="576" y="350">EVENT source</text>
+  <path class="line-green" d="M650,425 L570,425"/>
+  <text class="tiny" x="584" y="445">event ready</text>
+
+  <path class="line-blue" d="M900,360 L980,360"/>
+  <text class="tiny" x="906" y="344">routed source ID</text>
+  <path class="line-orange" d="M980,520 C945,500 930,475 900,450"/>
+  <text class="tiny" x="905" y="485">queued spikes</text>
+
+  <path class="line-purple-both" d="M570,475 C665,555 865,565 980,540"/>
+  <text class="tiny" x="680" y="580">TEACH / TICK controls and READ status</text>
+
+  <path class="line-green" d="M1155,585 L1155,605"/>
+
+  <text class="small" x="315" y="733">Learned connections are register state; the FPGA fabric does not physically rewire.</text>
+</svg>

@@ -59,7 +59,12 @@ module tb_eap16_event_router;
         .event_source(event_source),
         .event_consume(event_consume),
         .overflow(overflow),
-        .level(level)
+        .level(level),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data()
     );
 
     eap16_event_router #(
@@ -76,7 +81,12 @@ module tb_eap16_event_router;
         .event_source(min_event_source),
         .event_consume(min_event_consume),
         .overflow(min_overflow),
-        .level(min_level)
+        .level(min_level),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data()
     );
 
     eap16_top #(

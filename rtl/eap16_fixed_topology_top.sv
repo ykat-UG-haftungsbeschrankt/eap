@@ -107,7 +107,12 @@ module eap16_fixed_topology_top #(
         .event_source(routed_event_source),
         .event_consume(routed_event_valid),
         .overflow(event_overflow),
-        .level()
+        .level(),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data()
     );
 
     for (genvar g = 0; g < N; g++) begin : gen_fixed_pe

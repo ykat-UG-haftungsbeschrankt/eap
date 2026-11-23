@@ -439,7 +439,7 @@ def main() -> int:
         arguments.adaptive_netlist, "eap16_top"
     )
     binary_metrics = baseline.read_synthesis_metrics(
-        arguments.binary_netlist, "binary_lut_array"
+        arguments.binary_netlist, "binary_lut_array_benchmark_top"
     )
 
     output_path = arguments.build_dir / "snn_binary_comparison_trials.csv"

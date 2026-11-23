@@ -22,7 +22,8 @@ BENCHMARK_SEED ?= 1
 CORE_RTL := rtl/eap_dynamic_pe.sv rtl/eap16_event_router.sv rtl/eap16_top.sv
 COMPARISON_RTL := $(CORE_RTL) rtl/eap16_fixed_topology_top.sv
 BINARY_COMPARISON_RTL := rtl/eap16_event_router.sv \
-                         blm/binary_lut_pe.sv blm/binary_lut_array.sv
+                         blm/binary_lut_pe.sv blm/binary_lut_array.sv \
+                         blm/binary_lut_array_benchmark_top.sv
 COMPARISON_TB := $(BUILD_DIR)/tb_snn_comparison.vvp
 BINARY_COMPARISON_TB := $(BUILD_DIR)/tb_binary_lut_snn_comparison.vvp
 FIXED_COMPARISON_SYNTH := $(BUILD_DIR)/snn_fixed_topology_gowin.json
@@ -107,7 +108,7 @@ $(ADAPTIVE_COMPARISON_SYNTH): $(CORE_RTL)
 $(BINARY_COMPARISON_SYNTH): $(BINARY_COMPARISON_RTL)
 	mkdir -p $(BUILD_DIR)
 	$(YOSYS) -Q -q -l $(BUILD_DIR)/snn_binary_lut_gowin.log \
-	    -p "read_verilog -sv $^; synth_gowin -top binary_lut_array -json $@"
+	    -p "read_verilog -sv $^; synth_gowin -top binary_lut_array_benchmark_top -json $@"
 
 $(UART_TB): $(BOARD_RTL) tb/tb_eap16_tangnano9k_top.sv
 	mkdir -p $(BUILD_DIR)

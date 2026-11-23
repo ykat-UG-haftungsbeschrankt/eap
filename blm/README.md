@@ -118,6 +118,85 @@ popcount tree. For the UART top, `COUNT_SELECTED_ONLY` computes only the
 selected PE's count rather than 16 independent counts. The array's default
 mode still reports every PE count for benchmarks.
 
+## Generic parallel BLM networks
+
+[`binary_lut_dual_array.sv`](binary_lut_dual_array.sv) retains its original
+module name, but `NETWORK_COUNT` now configures how many independent BLM
+arrays it instantiates (default 2). Each array has its own event valid/ready
+input, event source, teacher-spike mask, maintenance tick, FIFO, and feedback
+path. Arrays share only clock and reset; they process separate streams in
+parallel and learn separate connection masks. This is a core-level experiment,
+not yet a UART/board wrapper or a multilayer network. `N` configures the PEs
+per array (default 16).
+
+The flat, combinational synapse read port is optional. `SYNAPSE_READ_PORT=0`
+is the area-saving default because the snapshot map already contains the
+synapses; with the port disabled, `synapse_read_data` is tied low. Set
+`SYNAPSE_READ_PORT=1` for live one-bit reads using address
+`network_id*N*N + target_pe*N + source_id`. With two 16-PE arrays, this is a
+9-bit address over 512 connection bits: network 0, PE 1, source 0 is address
+16; network 1, PE 2, source 0 is address 288.
+
+The 32-bit snapshot map is network-major and covers the complete resumable
+state. Assert `snapshot_pause` for the whole scan or restore; this pauses every
+array and deasserts `event_ready`. Reads are combinational. A write is accepted
+on the rising clock edge when `snapshot_write_enable` and
+`snapshot_write_ready` are high. `snapshot_write_ready` is high only while
+paused, out of reset, and addressed within the map. Any producer event that
+was not accepted before pausing is outside the network snapshot; keep its
+`valid` and source stable until it is accepted after resume.
+
+For the default `N=16`, `FIFO_DEPTH=64`, each network occupies 113 words:
+
+| Local word addresses | Contents |
+|---|---|
+| 0–31 | Two words per PE, in PE-ID order. Word 0 is `{candidate_pre, synapse_on}`; in word 1, bit 3 is `spike`, bit 2 is `post_recent`, and bits 1:0 are membrane state. |
+| 32–95 | The 64 physical FIFO ring slots. Inactive slots read as zero. |
+| 96–111 | The 16 pending-feedback counters, in source-ID order. |
+| 112 | Router control: FIFO count, read/write pointers, `last_grant`, and sticky overflow in bits 24:0. |
+
+Thus the default two-network map has 226 words and an 8-bit global address.
+The FIFO ring contents and pointers/count are both included, so queued events
+and pending feedback survive restore exactly.
+
+Run its throughput and isolation checks with:
+
+```sh
+make -C blm dual-network-test
+```
+
+The self-check runs both the default two-network configuration and a
+three-network configuration. With simultaneous streams, each network
+delivered 256 events in 257 cycles with no stalls: 0.996 broadcasts/cycle per
+network, or 1.992 aggregate for two and 2.988 for three. A separate check
+trained one connection in each of two networks, then changed only network 0;
+its selected connection count became 2 while network 1 remained at 1. The
+testbench also exercises the optional flat port, queues an event and feedback
+spike, then saves, corrupts, restores, and compares the full snapshot map.
+These are RTL simulation results. The full BLM suite passes with Icarus
+Verilog 12.0 via `make -B -C blm test`.
+
+For target utilization/timing estimation, run:
+
+```sh
+make -C blm dual-network-estimate
+```
+
+With `N=16`, `FIFO_DEPTH=64`, `NETWORK_COUNT=2`, and the default
+`SYNAPSE_READ_PORT=0`, Yosys 0.52 maps 6,096 LUT1-LUT4 cells, 845 ALU cells,
+1,426 flip-flops, and 8 RAM16SDP4 blocks. The nextpnr-gowin 0.7-1+b2
+placement-only pass uses **7,486/8,640 slices (86.6%)** and estimates
+31.25 MHz against the 13.5 MHz constraint. The command uses `--no-route`; it
+checks placement and pre-route timing, not routed timing.
+
+`make -C blm dual-network-place` still requests full routing. The unconstrained
+full-route attempt was stopped after more than 22 minutes with routing still
+in progress, so full-route timing is not verified. This is a core-only result
+without the board UART or Tang Nano pin constraints: it does not create or
+program a board bitstream. The core has 187 top-level I/O bits, and the UART
+snapshot controls and physical board interface still need integration and
+validation.
+
 Run the 16-PE network benchmark with:
 
 ```sh

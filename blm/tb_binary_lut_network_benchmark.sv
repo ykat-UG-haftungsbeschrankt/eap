@@ -38,6 +38,12 @@ module tb_binary_lut_network_benchmark;
     ) dut (
         .clk(clk),
         .rst(rst),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data(),
+        .snapshot_write_ready(),
         .learning_enable(learning_enable),
         .event_valid(event_valid),
         .event_source(event_source),

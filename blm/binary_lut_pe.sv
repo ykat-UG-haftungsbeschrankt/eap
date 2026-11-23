@@ -12,6 +12,11 @@ module binary_lut_pe #(
     input  logic clk,
     input  logic rst,
     input  logic learning_enable,
+    input  logic snapshot_pause,
+    input  logic snapshot_state_word,
+    input  logic snapshot_write_enable,
+    input  logic [31:0] snapshot_write_data,
+    output logic [31:0] snapshot_read_data,
     // Shared array decode; all-zero indicates no valid source event.
     input  logic [N-1:0] event_source_onehot,
     input  logic teacher_spike,
@@ -55,6 +60,13 @@ module binary_lut_pe #(
     endfunction
 
     always @* begin
+        if (snapshot_state_word)
+            snapshot_read_data = {28'b0, spike, post_recent, membrane_state};
+        else
+            snapshot_read_data = {candidate_pre, synapse_on};
+    end
+
+    always @* begin
         source_match = event_source_onehot;
         synaptic_input = |(source_match & synapse_on);
         membrane_lut_result = membrane_transition(
@@ -80,6 +92,17 @@ module binary_lut_pe #(
             synapse_on <= '0;
             post_recent <= 1'b0;
             candidate_pre <= '0;
+        end else if (snapshot_pause) begin
+            if (snapshot_write_enable) begin
+                if (!snapshot_state_word) begin
+                    synapse_on <= snapshot_write_data[N-1:0];
+                    candidate_pre <= snapshot_write_data[2*N-1:N];
+                end else begin
+                    membrane_state <= snapshot_write_data[1:0];
+                    post_recent <= snapshot_write_data[2];
+                    spike <= snapshot_write_data[3];
+                end
+            end
         end else begin
             spike <= will_spike;
             if (will_spike)

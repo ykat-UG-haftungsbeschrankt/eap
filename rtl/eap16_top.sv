@@ -46,7 +46,12 @@ module eap16_top #(
         .event_source(routed_event_source),
         .event_consume(routed_event_valid),
         .overflow(event_overflow),
-        .level(event_fifo_level)
+        .level(event_fifo_level),
+        .snapshot_pause(1'b0),
+        .snapshot_addr('0),
+        .snapshot_write_enable(1'b0),
+        .snapshot_write_data(32'b0),
+        .snapshot_read_data()
     );
 
     for (genvar g = 0; g < N; g++) begin : gen_pe
