@@ -79,20 +79,21 @@ well. Latest mapped primitive counts for the three network cores are:
 |---|---:|---:|---:|---:|---:|---:|
 | Fixed-topology SNN | 1,402 | 470 | 1,200 | 543 | 4 | 3,743 |
 | Adaptive EAP-16 | 36,746 | 4,825 | 20,469 | 8,351 | 4 | 70,520 |
-| Binary-LUT BLM | 3,049 | 648 | 1,168 | 687 | 4 | 5,681 |
+| Binary-LUT BLM | 2,575 | 806 | 528 | 687 | 4 | 4,729 |
 
-On this mapping, BLM uses about 2.17× the LUT1–4 cells and 1.27× the flip-flops
-of the oracle fixed network, while adaptive EAP-16 uses about 12.1× BLM's LUTs
-and flip-flops. All three tie on this task, which does not measure learning on
-unknown or changing topologies. Counts are for the network cores without the
-UART board wrapper, and are synthesis-mapped primitives—not placed area,
-timing, power, or energy results. The existing two-network `make benchmark`
-writes detailed cycle and trial results under `build/`; the three-network
-comparison writes `build/snn_binary_comparison_trials.csv`. It uses the same
-seeded task, verifies that BLM learned the expected feature edges, and freezes
-plasticity during held-out evaluation. The fixed-topology SNN is an oracle
-baseline with the correct edges prewired; these results cover this small
-synthetic task, not general SNN quality or a dense ANN.
+On this mapping, BLM uses about 1.84× the LUT1–4 cells and 1.27× the
+flip-flops of the oracle fixed network, while adaptive EAP-16 uses about
+14.3× BLM's LUT1–4 cells and 12.2× its flip-flops. All three tie on this task,
+which does not measure learning on unknown or changing topologies. Counts are
+for the network cores without the UART board wrapper, and are
+synthesis-mapped primitives—not placed area, timing, power, or energy results.
+The existing two-network `make benchmark` writes detailed cycle and trial
+results under `build/`; the three-network comparison writes
+`build/snn_binary_comparison_trials.csv`. It uses the same seeded task,
+verifies that BLM learned the expected feature edges, and freezes plasticity
+during held-out evaluation. The fixed-topology SNN is an oracle baseline with
+the correct edges prewired; these results cover this small synthetic task,
+not general SNN quality or a dense ANN.
 
 Default `make benchmark-networks` output:
 
@@ -109,7 +110,7 @@ Gowin-mapped network primitive counts (synthesis only):
   Model                         LUT1-4  MUX2_LUT   ALU   FFs   RAM  Cells
   Fixed-topology SNN              1402       470  1200   543     4   3743
   Adaptive EAP-16                36746      4825 20469  8351     4  70520
-  Binary-LUT BLM                  3049       648  1168   687     4   5681
+  Binary-LUT BLM                  2575       806   528   687     4   4729
 Primitive counts are not placement, timing, power, or area results. No physical event-rate or application-scale claim is made.
 Per-trial results: build/snn_binary_comparison_trials.csv
 ```

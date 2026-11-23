@@ -12,19 +12,16 @@ module binary_lut_pe #(
     input  logic clk,
     input  logic rst,
     input  logic learning_enable,
-    input  logic event_valid,
-    input  logic [$clog2(N)-1:0] event_source,
+    // Shared array decode; all-zero indicates no valid source event.
+    input  logic [N-1:0] event_source_onehot,
     input  logic teacher_spike,
     input  logic maintenance_tick,
     output logic spike,
     output logic [1:0] membrane_state,
     output logic [N-1:0] synapse_mask
 );
-    localparam int ID_W = $clog2(N);
     localparam logic [N-1:0] SELF_MASK = N'(1) << PE_ID;
     localparam logic [N-1:0] NONSELF_MASK = ~SELF_MASK;
-    localparam int ID_EXT_W = ID_W + 1;
-    localparam logic [ID_EXT_W-1:0] N_EXT = ID_EXT_W'(N);
 
     logic [N-1:0] synapse_on;
     logic [N-1:0] synapse_next;
@@ -34,7 +31,6 @@ module binary_lut_pe #(
     logic [N-1:0] depression_mask;
     logic [N-1:0] candidate_pre;
     logic [N-1:0] candidate_pre_next;
-    logic [ID_EXT_W-1:0] event_source_ext;
     logic post_recent;
     logic synaptic_input;
     logic [2:0] membrane_lut_result;
@@ -59,15 +55,8 @@ module binary_lut_pe #(
     endfunction
 
     always @* begin
-        source_match = '0;
-        event_source_ext = {1'b0, event_source};
-        for (int s = 0; s < N; s++)
-            source_match[s] =
-                event_valid && (event_source == ID_W'(s));
-
-        synaptic_input = 1'b0;
-        if (event_valid && event_source_ext < N_EXT)
-            synaptic_input = synapse_on[event_source];
+        source_match = event_source_onehot;
+        synaptic_input = |(source_match & synapse_on);
         membrane_lut_result = membrane_transition(
             {membrane_state, synaptic_input, maintenance_tick}
         );

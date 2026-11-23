@@ -126,6 +126,8 @@ module tb_binary_lut_tangnano9k_top;
         expect_line("OK EVENT 00");
         send_command("TEACH 01");
         expect_line("OK TEACH 01");
+        send_command("READ 00");
+        expect_line("PE 00 COUNT 00 SPIKE 0");
         send_command("READ 01");
         expect_line("PE 01 COUNT 01 SPIKE 0");
 

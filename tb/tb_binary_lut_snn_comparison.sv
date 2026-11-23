@@ -52,6 +52,7 @@ module tb_binary_lut_snn_comparison;
         .learning_enable(learning_enable),
         .event_valid(external_valid),
         .event_source(event_source),
+        .selected_pe('0),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),

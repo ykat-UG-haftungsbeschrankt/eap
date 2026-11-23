@@ -16,7 +16,8 @@
 		"/^set -o pipefail; make test 2>&1 \\| grep -E 'PASS:\\|All \\.\\* tests passed\\|FATAL:\\|error:\\|syntax error\\|make: \\(\\\\\\*\\\\\\*\\\\\\*\\|Warning\\|warning:\\)'$/": {
 			"approve": true,
 			"matchCommandLine": true
-		}
+		},
+		"make": true
 	},
 	"python-envs.defaultEnvManager": "ms-python.python:system"
 }

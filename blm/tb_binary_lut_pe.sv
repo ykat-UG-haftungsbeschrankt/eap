@@ -13,6 +13,7 @@ module tb_binary_lut_pe;
     logic learning_enable = 1'b0;
     logic event_valid = 1'b0;
     logic [3:0] event_source = '0;
+    logic [15:0] event_source_onehot;
     logic teacher_spike = 1'b0;
     logic maintenance_tick = 1'b0;
     logic spike;
@@ -21,6 +22,12 @@ module tb_binary_lut_pe;
 
     always #5 clk = ~clk;
 
+    always_comb begin
+        event_source_onehot = '0;
+        if (event_valid)
+            event_source_onehot[event_source] = 1'b1;
+    end
+
     binary_lut_pe #(
         .PE_ID(1),
         .N(16)
@@ -28,8 +35,7 @@ module tb_binary_lut_pe;
         .clk(clk),
         .rst(rst),
         .learning_enable(learning_enable),
-        .event_valid(event_valid),
-        .event_source(event_source),
+        .event_source_onehot(event_source_onehot),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .spike(spike),

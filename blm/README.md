@@ -97,14 +97,26 @@ The parameters require `N >= 2` and `0 <= PE_ID < N`; an out-of-range event ID
 selects no synapse. This variant is excitatory-only and omits idle pruning;
 both are deliberate differences from the signed-weight EAP PE.
 
+The array supports `2 <= N <= 16` and `FIFO_DEPTH >= 2`. It decodes the routed
+source ID once to a one-hot vector; all-zero means no valid event. The default
+`COUNT_SELECTED_ONLY=0` reports each PE's connection count. The board top sets
+it to 1 and supplies `selected_pe`; only that PE's 16-bit synapse mask is
+counted, with the selected count replicated across the packed bus for the
+UART console. An out-of-range selected ID returns zero.
+
 The binary PE simulation is included in `make -C blm test`. Run
 `make -C blm fpga-check` for generic synthesis and structural checking, or
 `make -C blm fpga-place` for Gowin mapping and placement without routing. For
-the standalone `N=16` PE, Yosys 0.52 mapped 196 LUT1-LUT4 cells and 34
-flip-flops; nextpnr-gowin 0.7 placed it at 215/8,640 slice sites. This
-top-level experiment exposes the synapse mask and membrane state for
-inspection. The no-route report has no timing result and does not establish
-how many PEs fit after adding a shared router.
+the standalone one-hot-input `N=16` PE, Yosys 0.52 maps 122 LUT1-LUT4 cells
+and 34 flip-flops; nextpnr-gowin 0.7 places it at 139/8,640 slice sites.
+Its source ID is decoded once by the network array and shared to all PEs.
+The no-route standalone report is not a full-array placement or timing result.
+
+The shared event source is decoded once in `binary_lut_array`, replacing
+replicated per-PE source-ID comparisons. Connection counts use a balanced
+popcount tree. For the UART top, `COUNT_SELECTED_ONLY` computes only the
+selected PE's count rather than 16 independent counts. The array's default
+mode still reports every PE count for benchmarks.
 
 Run the 16-PE network benchmark with:
 
@@ -125,15 +137,23 @@ broadcast per cycle). The supervised path formed source 0 to PE 1; three
 subsequent source-0 events produced one PE-1 spike 12 cycles after the initial
 candidate event, and that spike was routed back as one event.
 
-The full Tang Nano 9K top (16 PEs, shared FIFO, UART, and status logic) placed
-and routed at 6,045/8,640 slices (70.0%). nextpnr-gowin estimated a 14.59 MHz
-maximum for `eap_clk` against the 13.5 MHz constraint. At the constrained clock,
-one event broadcast per cycle corresponds to a theoretical 13.5 million
-network broadcasts/s (216 million PE-event updates/s across 16 PEs). This is
-derived from the RTL rate and timing estimate, not a measured board throughput
-or power result. The board heartbeat is active, but the UART hardware smoke
-test has not produced a reply; physical end-to-end operation remains
-unverified.
+The optimized Tang Nano 9K top (16 PEs, shared FIFO, UART, and status logic)
+placed and routed at 4,135/8,640 slices (47.9%), down from 6,045 slices
+(70.0%) before these optimizations: a 31.6% slice reduction. The BLM network
+core's Yosys-mapped LUT1-LUT4 count fell from 3,049 to 2,575, ALU cells from
+1,168 to 528, and mapped cells from 5,681 to 4,729; flip-flops remained 687.
+The count-only board option increases mux cells somewhat, trading combinational
+selection for fewer replicated popcount trees. nextpnr-gowin estimated
+16.43 MHz maximum for `eap_clk` against the 13.5 MHz constraint. The complete
+board run is recorded in
+[`binary_lut_tangnano9k_pnr_report.json`](../build/blm/binary_lut_tangnano9k_pnr_report.json).
+
+At the constrained clock, one event broadcast per cycle corresponds to a
+theoretical 13.5 million network broadcasts/s (216 million PE-event updates/s
+across 16 PEs). This is derived from the RTL rate and timing estimate, not a
+measured board throughput or power result. The board heartbeat is active, but
+the UART hardware smoke test has not produced a reply; physical end-to-end
+operation remains unverified.
 
 ## Compare against EAP-16 and fixed topology
 

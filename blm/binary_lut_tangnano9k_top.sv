@@ -69,13 +69,15 @@ module blm_binary_lut_tangnano9k_top #(
 
     binary_lut_array #(
         .N(N),
-        .FIFO_DEPTH(EVENT_FIFO_DEPTH)
+        .FIFO_DEPTH(EVENT_FIFO_DEPTH),
+        .COUNT_SELECTED_ONLY(1'b1)
     ) network (
         .clk(eap_clk),
         .rst(eap_rst),
         .learning_enable(1'b1),
         .event_valid(event_valid),
         .event_source(event_source),
+        .selected_pe(status_pe[$clog2(N)-1:0]),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
