@@ -21,7 +21,6 @@ import compare_snn as baseline
 
 
 N = baseline.N
-FIFO_DEPTH = baseline.FIFO_DEPTH
 CLASS0_PE, CLASS1_PE = baseline.CLASS_TARGETS
 RESULT_FIELDS = (
     "trial",
@@ -53,23 +52,22 @@ class BinaryCycle:
     spikes: int
     class0_connections: int
     class1_connections: int
-    overflow: bool
 
 
 def parse_binary_output(output: str) -> list[BinaryCycle]:
-    config: tuple[int, int] | None = None
+    config: int | None = None
     cycles: list[BinaryCycle] = []
     end_cycle: int | None = None
 
     for line in output.splitlines():
         if line.startswith("BCONFIG,"):
             fields = line.split(",")
-            if len(fields) != 3:
+            if len(fields) != 2:
                 raise RuntimeError(f"malformed BCONFIG record: {line}")
-            config = (int(fields[1]), int(fields[2]))
+            config = int(fields[1])
         elif line.startswith("BTRACE,"):
             fields = line.split(",")
-            if len(fields) != 14:
+            if len(fields) != 13:
                 raise RuntimeError(
                     f"malformed BTRACE record with {len(fields)} fields: {line}"
                 )
@@ -87,16 +85,13 @@ def parse_binary_output(output: str) -> list[BinaryCycle]:
                     spikes=int(fields[10], 16),
                     class0_connections=int(fields[11]),
                     class1_connections=int(fields[12]),
-                    overflow=bool(int(fields[13])),
                 )
             )
         elif line.startswith("BEND,"):
             end_cycle = int(line.split(",")[1])
 
-    if config != (N, FIFO_DEPTH):
-        raise RuntimeError(
-            f"binary network config {config} does not match {(N, FIFO_DEPTH)}"
-        )
+    if config != N:
+        raise RuntimeError(f"binary network PE count {config} does not match {N}")
     if end_cycle != len(cycles):
         raise RuntimeError(
             f"binary END record {end_cycle} does not match "
@@ -186,10 +181,6 @@ def validate_binary_progress(
             raise AssertionError(
                 f"binary lane reported an invalid handshake at cycle "
                 f"{cycle_number}"
-            )
-        if lane.overflow:
-            raise AssertionError(
-                f"binary event router overflowed at cycle {cycle_number}"
             )
         if lane.evaluation and not topology_checked:
             if (

@@ -12,13 +12,14 @@ module tb_binary_lut_pe;
     logic rst = 1'b1;
     logic learning_enable = 1'b0;
     logic snapshot_pause = 1'b0;
-    logic snapshot_state_word = 1'b0;
-    logic snapshot_write_enable = 1'b0;
+    logic snapshot_write_word0 = 1'b0;
+    logic snapshot_write_word1 = 1'b0;
     logic [31:0] snapshot_write_data = '0;
-    logic [31:0] snapshot_read_data;
+    logic [31:0] snapshot_read_word0;
+    logic [3:0] snapshot_read_word1;
     logic event_valid = 1'b0;
     logic [3:0] event_source = '0;
-    logic [15:0] event_source_onehot;
+    logic [15:0] event_source_mask;
     logic teacher_spike = 1'b0;
     logic maintenance_tick = 1'b0;
     logic spike;
@@ -28,9 +29,9 @@ module tb_binary_lut_pe;
     always #5 clk = ~clk;
 
     always_comb begin
-        event_source_onehot = '0;
+        event_source_mask = '0;
         if (event_valid)
-            event_source_onehot[event_source] = 1'b1;
+            event_source_mask[event_source] = 1'b1;
     end
 
     binary_lut_pe #(
@@ -41,11 +42,12 @@ module tb_binary_lut_pe;
         .rst(rst),
         .learning_enable(learning_enable),
         .snapshot_pause(snapshot_pause),
-        .snapshot_state_word(snapshot_state_word),
-        .snapshot_write_enable(snapshot_write_enable),
+        .snapshot_write_word0(snapshot_write_word0),
+        .snapshot_write_word1(snapshot_write_word1),
         .snapshot_write_data(snapshot_write_data),
-        .snapshot_read_data(snapshot_read_data),
-        .event_source_onehot(event_source_onehot),
+        .snapshot_read_word0(snapshot_read_word0),
+        .snapshot_read_word1(snapshot_read_word1),
+        .event_source_mask(event_source_mask),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .spike(spike),

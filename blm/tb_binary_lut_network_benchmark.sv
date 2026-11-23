@@ -9,7 +9,6 @@
 
 module tb_binary_lut_network_benchmark;
     localparam int N = 16;
-    localparam int FIFO_DEPTH = 64;
     localparam int ID_W = $clog2(N);
     localparam int EVENT_COUNT = 256;
     localparam int TEACHER_PE = 1;
@@ -19,11 +18,13 @@ module tb_binary_lut_network_benchmark;
     logic learning_enable = 1'b0;
     logic event_valid = 1'b0;
     logic [ID_W-1:0] event_source = '0;
+    logic [ID_W-1:0] event_target_pe = ID_W'(TEACHER_PE);
+    logic event_broadcast = 1'b1;
     logic [N-1:0] teacher_spike = '0;
     logic maintenance_tick = 1'b0;
     logic event_ready;
-    logic event_overflow;
     logic [N-1:0] spikes;
+    logic [N*N-1:0] synapse_map;
     logic [N*5-1:0] packed_connection_counts;
     integer cycle_count = 0;
 
@@ -33,25 +34,26 @@ module tb_binary_lut_network_benchmark;
         cycle_count <= cycle_count + 1;
 
     binary_lut_array #(
-        .N(N),
-        .FIFO_DEPTH(FIFO_DEPTH)
+        .N(N)
     ) dut (
         .clk(clk),
         .rst(rst),
+        .learning_enable(learning_enable),
+        .event_valid(event_valid),
+        .event_source(event_source),
+        .event_target_pe(event_target_pe),
+        .event_broadcast(event_broadcast),
+        .selected_pe(ID_W'(TEACHER_PE)),
+        .synapse_map(synapse_map),
         .snapshot_pause(1'b0),
         .snapshot_addr('0),
         .snapshot_write_enable(1'b0),
         .snapshot_write_data(32'b0),
         .snapshot_read_data(),
         .snapshot_write_ready(),
-        .learning_enable(learning_enable),
-        .event_valid(event_valid),
-        .event_source(event_source),
-        .selected_pe('0),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
-        .event_overflow(event_overflow),
         .spikes(spikes),
         .packed_connection_counts(packed_connection_counts)
     );
@@ -63,6 +65,8 @@ module tb_binary_lut_network_benchmark;
             learning_enable = enable_learning;
             event_valid = 1'b0;
             event_source = '0;
+            event_target_pe = ID_W'(TEACHER_PE);
+            event_broadcast = 1'b1;
             teacher_spike = '0;
             maintenance_tick = 1'b0;
             repeat (2) @(posedge clk);
@@ -71,91 +75,65 @@ module tb_binary_lut_network_benchmark;
         end
     endtask
 
-    task automatic send_external_event(
-        input logic [ID_W-1:0] source,
-        output integer accepted_cycle
-    );
+    task automatic send_event(input logic [ID_W-1:0] source);
         logic accepted;
-        integer wait_cycles;
+        integer waits;
         begin
             @(negedge clk);
             event_valid = 1'b1;
             event_source = source;
             accepted = 1'b0;
-            wait_cycles = 0;
+            waits = 0;
             while (!accepted) begin
                 @(posedge clk);
-                accepted = event_valid && event_ready;
+                accepted = event_ready;
                 #1;
-                wait_cycles = wait_cycles + 1;
-                if (wait_cycles > FIFO_DEPTH + N)
-                    $fatal(1, "external event remained backpressured");
+                waits = waits + 1;
+                if (waits > 2)
+                    $fatal(1, "addressed event was unexpectedly backpressured");
             end
-            accepted_cycle = cycle_count;
             @(negedge clk);
             event_valid = 1'b0;
         end
     endtask
 
-    task automatic apply_teacher_spike(input integer pe);
+    task automatic teach_pe(input int pe_id);
         begin
             @(negedge clk);
-            teacher_spike = N'(1) << pe;
+            teacher_spike[pe_id] = 1'b1;
             @(posedge clk);
             #1;
-            teacher_spike = '0;
+            teacher_spike[pe_id] = 1'b0;
         end
     endtask
 
-    task automatic apply_maintenance_tick;
-        begin
-            @(negedge clk);
-            maintenance_tick = 1'b1;
-            @(posedge clk);
-            #1;
-            maintenance_tick = 1'b0;
-        end
-    endtask
-
-    task automatic run_event_throughput;
+    task automatic run_parallel_pe_throughput;
         integer accepted;
-        integer delivered;
         integer stalls;
         integer cycles;
-        integer rate_milli;
-        logic [ID_W-1:0] expected_source;
+        integer total_pe_events;
         begin
+            reset_network(1'b0);
+            event_broadcast = 1'b1;
             accepted = 0;
-            delivered = 0;
             stalls = 0;
             cycles = 0;
 
             @(negedge clk);
             event_valid = 1'b1;
             event_source = '0;
-
-            while (delivered < EVENT_COUNT) begin
+            while (accepted < EVENT_COUNT) begin
                 @(posedge clk);
                 cycles = cycles + 1;
-
-                if (event_valid) begin
-                    if (event_ready) begin
-                        expected_source = ID_W'(accepted % N);
-                        if (event_source !== expected_source)
-                            $fatal(1, "external burst source order changed");
-                        accepted = accepted + 1;
-                    end else begin
-                        stalls = stalls + 1;
-                    end
+                if (event_ready) begin
+                    if (event_source !== ID_W'(accepted % N))
+                        $fatal(1, "broadcast source order changed");
+                    accepted = accepted + 1;
+                end else begin
+                    stalls = stalls + 1;
                 end
 
-                if (dut.routed_event_valid) begin
-                    expected_source = ID_W'(delivered % N);
-                    if (dut.routed_event_source !== expected_source)
-                        $fatal(1, "routed burst source order changed");
-                    delivered = delivered + 1;
-                end
-
+                #1;
                 @(negedge clk);
                 if (accepted < EVENT_COUNT) begin
                     event_valid = 1'b1;
@@ -165,55 +143,54 @@ module tb_binary_lut_network_benchmark;
                 end
             end
 
-            if (accepted != EVENT_COUNT || delivered != EVENT_COUNT)
-                $fatal(1, "event burst lost or duplicated events");
-            if (stalls != 0)
-                $fatal(1, "uncontended FIFO burst was backpressured");
-            if (event_overflow)
-                $fatal(1, "event burst caused router overflow");
+            if (accepted != EVENT_COUNT || stalls != 0)
+                $fatal(1, "broadcast stream lost or stalled events");
 
-            rate_milli = (1000 * delivered) / cycles;
+            total_pe_events = N*accepted;
             $display(
-                "Saturated routing: %0d/%0d delivered in %0d cycles (%0d.%03d broadcasts/cycle), stalls=%0d",
-                delivered, EVENT_COUNT, cycles,
-                rate_milli / 1000, rate_milli % 1000, stalls
+                "Broadcast event stream: %0d PE-events in %0d cycles (%0d PE-events/cycle)",
+                total_pe_events, cycles, total_pe_events/cycles
             );
         end
     endtask
 
-    task automatic run_supervised_spike_path;
+    task automatic run_supervised_pe_path;
         integer first_event_cycle;
-        integer ignored_cycle;
         integer spike_cycle;
-        integer wait_cycles;
-        integer feedback_events;
         logic saw_spike;
         begin
             reset_network(1'b1);
-
-            send_external_event(ID_W'(0), first_event_cycle);
-            repeat (3) @(posedge clk);
+            event_broadcast = 1'b0;
+            event_target_pe = ID_W'(TEACHER_PE);
+            send_event(ID_W'(0));
+            first_event_cycle = cycle_count;
+            if (dut.gen_pe[TEACHER_PE].u_pe.candidate_pre[0] !== 1'b1)
+                $fatal(1, "addressed PE did not record source 0");
+            if (dut.gen_pe[0].u_pe.candidate_pre[0] !== 1'b0)
+                $fatal(1, "source event leaked to a different PE");
             if (packed_connection_counts[TEACHER_PE*5 +: 5] != 0)
                 $fatal(1, "connection formed before teaching spike");
 
-            apply_teacher_spike(TEACHER_PE);
+            teach_pe(TEACHER_PE);
             if (!spikes[TEACHER_PE])
                 $fatal(1, "teacher signal did not create its target spike");
             if (packed_connection_counts[TEACHER_PE*5 +: 5] != 5'd1)
                 $fatal(1, "teacher did not form source-0 connection");
+            if (synapse_map[TEACHER_PE*N] !== 1'b1)
+                $fatal(1, "teacher formed a connection on the wrong PE");
 
-            apply_maintenance_tick();
-
-            send_external_event(ID_W'(0), ignored_cycle);
-            send_external_event(ID_W'(0), ignored_cycle);
-            send_external_event(ID_W'(0), ignored_cycle);
+            @(negedge clk);
+            maintenance_tick = 1'b1;
+            @(posedge clk);
+            #1;
+            maintenance_tick = 1'b0;
+            if (dut.gen_pe[0].u_pe.candidate_pre[TEACHER_PE] !== 1'b1)
+                $fatal(1, "teacher spike was not broadcast as a PE event");
 
             saw_spike = 1'b0;
             spike_cycle = 0;
-            for (wait_cycles = 0; wait_cycles < 20 && !saw_spike;
-                 wait_cycles = wait_cycles + 1) begin
-                @(posedge clk);
-                #1;
+            for (int event_index = 0; event_index < 3; event_index++) begin
+                send_event(ID_W'(0));
                 if (spikes[TEACHER_PE]) begin
                     saw_spike = 1'b1;
                     spike_cycle = cycle_count;
@@ -222,32 +199,18 @@ module tb_binary_lut_network_benchmark;
             if (!saw_spike)
                 $fatal(1, "learned edge did not produce a target-PE spike");
 
-            feedback_events = 0;
-            for (wait_cycles = 0; wait_cycles < 20 &&
-                 feedback_events == 0; wait_cycles = wait_cycles + 1) begin
-                @(posedge clk);
-                if (dut.routed_event_valid &&
-                    dut.routed_event_source == ID_W'(TEACHER_PE))
-                    feedback_events = feedback_events + 1;
-                #1;
-            end
-            if (feedback_events != 1)
-                $fatal(1, "target spike was not routed back as an event");
-            if (event_overflow)
-                $fatal(1, "supervised spike path caused event overflow");
-
             $display(
-                "Supervised path: formed 0->PE%0d; 3 source-0 events produced a spike %0d cycles after the first training event; feedback events=%0d",
-                TEACHER_PE, spike_cycle - first_event_cycle, feedback_events
+                "Addressed learning: source 0 formed on PE %0d; spike after %0d cycles; peer spike broadcast verified",
+                TEACHER_PE, spike_cycle - first_event_cycle
             );
         end
     endtask
 
     initial begin
         reset_network(1'b0);
-        run_event_throughput();
-        run_supervised_spike_path();
-        $display("PASS: 16-PE binary network benchmark assertions");
+        run_parallel_pe_throughput();
+        run_supervised_pe_path();
+        $display("PASS: PE-addressable binary network checks");
         $finish;
     end
 

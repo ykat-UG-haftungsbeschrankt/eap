@@ -15,8 +15,8 @@ PACK_DEVICE ?= GW1N-9C
 BUILD_DIR ?= ../build/blm
 BOARD_CST ?= tangnano9k_binary_lut.cst
 BOARD_TOP := blm_binary_lut_tangnano9k_top
-BOARD_RTL := ../rtl/eap16_event_router.sv ../rtl/uart_rx.sv \
-             ../rtl/uart_tx.sv ../rtl/eap16_uart_console.sv \
+BOARD_RTL := ../rtl/uart_rx.sv ../rtl/uart_tx.sv \
+             ../rtl/eap16_uart_console.sv \
              binary_lut_pe.sv binary_lut_array.sv \
              binary_lut_tangnano9k_top.sv
 
@@ -96,20 +96,20 @@ $(BOARD_SIM): $(BOARD_RTL) tb_binary_lut_tangnano9k_top.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_tangnano9k_top -o $@ $^
 
-$(NETWORK_BENCH_SIM): ../rtl/eap16_event_router.sv binary_lut_pe.sv binary_lut_array.sv tb_binary_lut_network_benchmark.sv
+$(NETWORK_BENCH_SIM): binary_lut_pe.sv binary_lut_array.sv tb_binary_lut_network_benchmark.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_network_benchmark -o $@ $^
 
-$(DUAL_SIM): ../rtl/eap16_event_router.sv binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv tb_binary_lut_dual_array.sv
+$(DUAL_SIM): binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv tb_binary_lut_dual_array.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_dual_array -o $@ $^
 
-$(MULTI_SIM): ../rtl/eap16_event_router.sv binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv tb_binary_lut_dual_array.sv
+$(MULTI_SIM): binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv tb_binary_lut_dual_array.sv
 	mkdir -p $(BUILD_DIR)
 	$(IVERILOG) -g2012 -Wall -Wno-timescale -s tb_binary_lut_dual_array \
 	    -Ptb_binary_lut_dual_array.NETWORK_COUNT=3 -o $@ $^
 
-$(DUAL_SYNTH): ../rtl/eap16_event_router.sv binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv
+$(DUAL_SYNTH): binary_lut_pe.sv binary_lut_array.sv binary_lut_dual_array.sv
 	mkdir -p $(BUILD_DIR)
 	$(YOSYS) -Q -q -l $(BUILD_DIR)/binary_lut_dual_yosys.log \
 	    -p "read_verilog -sv $^; synth_gowin -top binary_lut_dual_array -json $@"

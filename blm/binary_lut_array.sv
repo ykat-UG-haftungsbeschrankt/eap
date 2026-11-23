@@ -7,21 +7,18 @@
 
 module binary_lut_array #(
     parameter int N = 16,
-    parameter int FIFO_DEPTH = 64,
     parameter bit COUNT_SELECTED_ONLY = 1'b0,
+    parameter bit COUNT_ENABLE = 1'b1,
     parameter bit SNAPSHOT_ACCESS = 1'b0,
-    parameter int SNAPSHOT_ADDR_W = $clog2(
-        2*N + FIFO_DEPTH + N +
-        ((($clog2(FIFO_DEPTH+1) +
-           2*((FIFO_DEPTH > 1) ? $clog2(FIFO_DEPTH) : 1) +
-           $clog2(N+1) + 1) + 31) / 32)
-    )
+    parameter int SNAPSHOT_ADDR_W = $clog2(2*N + 1)
 ) (
     input  logic clk,
     input  logic rst,
     input  logic learning_enable,
     input  logic event_valid,
     input  logic [$clog2(N)-1:0] event_source,
+    input  logic [$clog2(N)-1:0] event_target_pe,
+    input  logic event_broadcast,
     input  logic [$clog2(N)-1:0] selected_pe,
     output logic [N*N-1:0] synapse_map,
     input  logic snapshot_pause,
@@ -33,39 +30,21 @@ module binary_lut_array #(
     input  logic [N-1:0] teacher_spike,
     input  logic maintenance_tick,
     output logic event_ready,
-    output logic event_overflow,
     output logic [N-1:0] spikes,
     output logic [N*5-1:0] packed_connection_counts
 );
     localparam int ID_W = $clog2(N);
-    localparam int LEVEL_W = $clog2(FIFO_DEPTH + 1);
-    localparam int PTR_W = (FIFO_DEPTH > 1) ? $clog2(FIFO_DEPTH) : 1;
-    localparam int PENDING_W = $clog2(FIFO_DEPTH + 1);
-    localparam int ARBITER_W = $clog2(N + 1);
     localparam int PE_STATE_WORDS = 2*N;
-    localparam int FIFO_STATE_WORDS = FIFO_DEPTH;
-    localparam int PENDING_STATE_WORDS = N;
-    localparam int SNAPSHOT_WORD_BITS = 32;
-    localparam int ROUTER_CONTROL_BITS =
-        LEVEL_W + 2*PTR_W + ARBITER_W + 1;
-    localparam int ROUTER_CONTROL_WORDS =
-        (ROUTER_CONTROL_BITS + SNAPSHOT_WORD_BITS - 1) / SNAPSHOT_WORD_BITS;
-    localparam int ROUTER_STATE_WORDS =
-        FIFO_STATE_WORDS + PENDING_STATE_WORDS + ROUTER_CONTROL_WORDS;
-    localparam int ARRAY_STATE_WORDS = PE_STATE_WORDS + ROUTER_STATE_WORDS;
-    localparam int ROUTER_STATE_ADDR_W = $clog2(ROUTER_STATE_WORDS);
+    localparam int ARRAY_STATE_WORDS = PE_STATE_WORDS;
 
-    logic routed_event_valid;
-    logic [ID_W-1:0] routed_event_source;
-    logic [N-1:0] routed_event_source_onehot;
-    logic [LEVEL_W-1:0] event_fifo_level;
+    logic [N-1:0] pe_event_source_mask [0:N-1];
     logic [N-1:0] connection_mask_by_pe [0:N-1];
-    logic [31:0] pe_snapshot_read_data [0:N-1];
-    logic pe_snapshot_word [0:N-1];
-    logic [N-1:0] pe_snapshot_write_enable;
-    logic [ROUTER_STATE_ADDR_W-1:0] router_snapshot_addr;
-    logic [31:0] router_snapshot_read_data;
-    logic router_snapshot_write_enable;
+    logic [2*N-1:0] pe_snapshot_word0 [0:N-1];
+    logic [3:0] pe_snapshot_word1 [0:N-1];
+    logic [N-1:0] pe_snapshot_write_word0;
+    logic [N-1:0] pe_snapshot_write_word1;
+    logic [N-1:0] external_event_source_onehot;
+    logic event_target_valid;
     integer pe_snapshot_index;
 
     function automatic logic [4:0] count_connections(
@@ -112,36 +91,23 @@ module binary_lut_array #(
         end
     endfunction
 
-    eap16_event_router #(
-        .N(N),
-        .FIFO_DEPTH(FIFO_DEPTH),
-        .SNAPSHOT_ACCESS(SNAPSHOT_ACCESS),
-        .SNAPSHOT_ADDR_W(ROUTER_STATE_ADDR_W)
-    ) event_router (
-        .clk(clk),
-        .rst(rst),
-        .external_valid(event_valid),
-        .external_source(event_source),
-        .external_ready(event_ready),
-        .feedback_spikes(spikes),
-        .event_valid(routed_event_valid),
-        .event_source(routed_event_source),
-        .event_consume(routed_event_valid),
-        .overflow(event_overflow),
-        .level(event_fifo_level),
-        .snapshot_pause(SNAPSHOT_ACCESS && snapshot_pause),
-        .snapshot_addr(router_snapshot_addr),
-        .snapshot_write_enable(router_snapshot_write_enable),
-        .snapshot_write_data(snapshot_write_data),
-        .snapshot_read_data(router_snapshot_read_data)
-    );
+    assign event_target_valid = int'(event_target_pe) < N;
+    assign event_ready =
+        !rst && !(SNAPSHOT_ACCESS && snapshot_pause) &&
+        (!event_valid || event_broadcast || event_target_valid);
 
     for (genvar s = 0; s < N; s++) begin : gen_source_decode
-        assign routed_event_source_onehot[s] =
-            routed_event_valid && routed_event_source == ID_W'(s);
+        assign external_event_source_onehot[s] =
+            event_valid && event_source == ID_W'(s);
     end
 
     for (genvar g = 0; g < N; g++) begin : gen_pe
+        // All spikes are combined as a multi-hot event mask for every PE.
+        assign pe_event_source_mask[g] =
+            (external_event_source_onehot &
+             {N{event_broadcast ||
+                event_target_pe == ID_W'(g)}}) | spikes;
+
         binary_lut_pe #(
             .PE_ID(g),
             .N(N)
@@ -150,11 +116,12 @@ module binary_lut_array #(
             .rst(rst),
             .learning_enable(learning_enable),
             .snapshot_pause(SNAPSHOT_ACCESS && snapshot_pause),
-            .snapshot_state_word(pe_snapshot_word[g]),
-            .snapshot_write_enable(pe_snapshot_write_enable[g]),
+            .snapshot_write_word0(pe_snapshot_write_word0[g]),
+            .snapshot_write_word1(pe_snapshot_write_word1[g]),
             .snapshot_write_data(snapshot_write_data),
-            .snapshot_read_data(pe_snapshot_read_data[g]),
-            .event_source_onehot(routed_event_source_onehot),
+            .snapshot_read_word0(pe_snapshot_word0[g]),
+            .snapshot_read_word1(pe_snapshot_word1[g]),
+            .event_source_mask(pe_event_source_mask[g]),
             .teacher_spike(teacher_spike[g]),
             .maintenance_tick(maintenance_tick),
             .spike(spikes[g]),
@@ -167,22 +134,14 @@ module binary_lut_array #(
     end
 
     if (SNAPSHOT_ACCESS) begin : gen_snapshot_access
-        assign router_snapshot_addr =
-            ROUTER_STATE_ADDR_W'(
-                snapshot_addr - SNAPSHOT_ADDR_W'(PE_STATE_WORDS)
-            );
-        assign router_snapshot_write_enable =
-            snapshot_pause && snapshot_write_enable &&
-            snapshot_addr >= SNAPSHOT_ADDR_W'(PE_STATE_WORDS) &&
-            snapshot_addr < SNAPSHOT_ADDR_W'(ARRAY_STATE_WORDS);
-
         for (genvar g = 0; g < N; g++) begin : gen_pe_state_access
             localparam int PE_STATE_BASE = g * 2;
-            assign pe_snapshot_word[g] = snapshot_addr[0];
-            assign pe_snapshot_write_enable[g] =
+            assign pe_snapshot_write_word0[g] =
                 snapshot_pause && snapshot_write_enable &&
-                snapshot_addr >= SNAPSHOT_ADDR_W'(PE_STATE_BASE) &&
-                snapshot_addr < SNAPSHOT_ADDR_W'(PE_STATE_BASE + 2);
+                snapshot_addr == SNAPSHOT_ADDR_W'(PE_STATE_BASE);
+            assign pe_snapshot_write_word1[g] =
+                snapshot_pause && snapshot_write_enable &&
+                snapshot_addr == SNAPSHOT_ADDR_W'(PE_STATE_BASE + 1);
         end
 
         always @* begin
@@ -193,24 +152,26 @@ module binary_lut_array #(
             pe_snapshot_index = 0;
             if (snapshot_addr < SNAPSHOT_ADDR_W'(PE_STATE_WORDS)) begin
                 pe_snapshot_index = snapshot_addr >> 1;
-                snapshot_read_data = pe_snapshot_read_data[pe_snapshot_index];
-            end else if (snapshot_addr <
-                         SNAPSHOT_ADDR_W'(ARRAY_STATE_WORDS)) begin
-                snapshot_read_data = router_snapshot_read_data;
+                if (snapshot_addr[0])
+                    snapshot_read_data[3:0] =
+                        pe_snapshot_word1[pe_snapshot_index];
+                else
+                    snapshot_read_data[2*N-1:0] =
+                        pe_snapshot_word0[pe_snapshot_index];
             end
         end
     end else begin : gen_no_snapshot_access
         assign snapshot_read_data = '0;
         assign snapshot_write_ready = 1'b0;
-        assign router_snapshot_addr = '0;
-        assign router_snapshot_write_enable = 1'b0;
         for (genvar g = 0; g < N; g++) begin : gen_pe_state_defaults
-            assign pe_snapshot_word[g] = 1'b0;
-            assign pe_snapshot_write_enable[g] = 1'b0;
+            assign pe_snapshot_write_word0[g] = 1'b0;
+            assign pe_snapshot_write_word1[g] = 1'b0;
         end
     end
 
-    if (COUNT_SELECTED_ONLY) begin : gen_selected_count
+    if (!COUNT_ENABLE) begin : gen_no_connection_count
+        assign packed_connection_counts = '0;
+    end else if (COUNT_SELECTED_ONLY) begin : gen_selected_count
         logic [N-1:0] selected_pe_onehot;
         logic [N-1:0] selected_connection_mask;
         logic [4:0] selected_connection_count;

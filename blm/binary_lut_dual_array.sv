@@ -7,17 +7,12 @@
 
 module binary_lut_dual_array #(
     parameter int N = 16,
-    parameter int FIFO_DEPTH = 64,
     parameter int NETWORK_COUNT = 2,
+    parameter bit SNAPSHOT_ACCESS = 1'b0,
+    parameter bit CONNECTION_COUNTS = 1'b0,
     // The snapshot map contains synapses; the extra live mux is opt-in.
     parameter bit SYNAPSE_READ_PORT = 1'b0,
-    parameter int SNAPSHOT_CONTROL_BITS =
-        $clog2(FIFO_DEPTH+1) +
-        2*((FIFO_DEPTH > 1) ? $clog2(FIFO_DEPTH) : 1) +
-        $clog2(N+1) + 1,
-    parameter int SNAPSHOT_WORDS_PER_NETWORK =
-        2*N + FIFO_DEPTH + N +
-        ((SNAPSHOT_CONTROL_BITS + 32'd31) / 32'd32),
+    parameter int SNAPSHOT_WORDS_PER_NETWORK = 2*N,
     parameter int SNAPSHOT_ADDR_W =
         $clog2(NETWORK_COUNT*SNAPSHOT_WORDS_PER_NETWORK)
 ) (
@@ -32,21 +27,19 @@ module binary_lut_dual_array #(
     input  logic [NETWORK_COUNT-1:0] learning_enable,
     input  logic [NETWORK_COUNT-1:0] event_valid,
     input  logic [NETWORK_COUNT*$clog2(N)-1:0] event_source,
+    input  logic [NETWORK_COUNT*$clog2(N)-1:0] event_target_pe,
     input  logic [NETWORK_COUNT*$clog2(N)-1:0] selected_pe,
     input  logic [$clog2(NETWORK_COUNT*N*N)-1:0] synapse_read_addr,
     output logic synapse_read_data,
     input  logic [NETWORK_COUNT*N-1:0] teacher_spike,
     input  logic [NETWORK_COUNT-1:0] maintenance_tick,
     output logic [NETWORK_COUNT-1:0] event_ready,
-    output logic [NETWORK_COUNT-1:0] event_overflow,
     output logic [NETWORK_COUNT*N-1:0] spikes,
     output logic [NETWORK_COUNT*5-1:0] selected_connection_counts
 );
     localparam int ID_W = $clog2(N);
-    localparam int CONTROL_USED_BITS = SNAPSHOT_CONTROL_BITS;
-    localparam int CONTROL_WORDS = (CONTROL_USED_BITS + 31) / 32;
     localparam int ARRAY_STATE_WORDS = SNAPSHOT_WORDS_PER_NETWORK;
-    localparam int ARRAY_STATE_ADDR_W = $clog2(ARRAY_STATE_WORDS);
+    localparam int ARRAY_STATE_ADDR_W = $clog2(ARRAY_STATE_WORDS + 1);
     localparam int TOTAL_STATE_WORDS = NETWORK_COUNT*ARRAY_STATE_WORDS;
     localparam int TOTAL_STATE_ADDR_EXT_W = SNAPSHOT_ADDR_W + 1;
     localparam logic [TOTAL_STATE_ADDR_EXT_W-1:0] TOTAL_STATE_WORDS_EXT =
@@ -90,7 +83,8 @@ module binary_lut_dual_array #(
 
     always @* begin
         snapshot_read_data = '0;
-        if (snapshot_state_addr_ext < TOTAL_STATE_WORDS_EXT) begin
+        if (SNAPSHOT_ACCESS &&
+            snapshot_state_addr_ext < TOTAL_STATE_WORDS_EXT) begin
             for (int network_id = 0;
                  network_id < NETWORK_COUNT;
                  network_id++) begin
@@ -103,7 +97,7 @@ module binary_lut_dual_array #(
             end
         end
         snapshot_write_ready =
-            snapshot_pause && !rst &&
+            SNAPSHOT_ACCESS && snapshot_pause && !rst &&
             (snapshot_state_addr_ext < TOTAL_STATE_WORDS_EXT);
     end
 
@@ -114,9 +108,9 @@ module binary_lut_dual_array #(
 
         binary_lut_array #(
             .N(N),
-            .FIFO_DEPTH(FIFO_DEPTH),
             .COUNT_SELECTED_ONLY(1'b1),
-            .SNAPSHOT_ACCESS(1'b1),
+            .COUNT_ENABLE(CONNECTION_COUNTS),
+            .SNAPSHOT_ACCESS(SNAPSHOT_ACCESS),
             .SNAPSHOT_ADDR_W(ARRAY_STATE_ADDR_W)
         ) u_array (
             .clk(clk),
@@ -130,12 +124,15 @@ module binary_lut_dual_array #(
             .learning_enable(learning_enable[network_id]),
             .event_valid(event_valid[network_id]),
             .event_source(event_source[network_id*ID_W +: ID_W]),
+            .event_target_pe(
+                event_target_pe[network_id*ID_W +: ID_W]
+            ),
+            .event_broadcast(1'b0),
             .selected_pe(selected_pe[network_id*ID_W +: ID_W]),
             .synapse_map(synapse_map[network_id]),
             .teacher_spike(teacher_spike[network_id*N +: N]),
             .maintenance_tick(maintenance_tick[network_id]),
             .event_ready(event_ready[network_id]),
-            .event_overflow(event_overflow[network_id]),
             .spikes(spikes[network_id*N +: N]),
             .packed_connection_counts(packed_counts[network_id])
         );
@@ -146,7 +143,8 @@ module binary_lut_dual_array #(
                 SNAPSHOT_ADDR_W'(ARRAY_STATE_BASE)
             );
         assign array_snapshot_write_enable[network_id] =
-            snapshot_write_enable && snapshot_write_ready &&
+            SNAPSHOT_ACCESS && snapshot_write_enable &&
+            snapshot_write_ready &&
             snapshot_state_addr_ext >=
                 TOTAL_STATE_ADDR_EXT_W'(ARRAY_STATE_BASE) &&
             snapshot_state_addr_ext <

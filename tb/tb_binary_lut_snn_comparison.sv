@@ -9,7 +9,6 @@
 
 module tb_binary_lut_snn_comparison;
     localparam int N = 16;
-    localparam int FIFO_DEPTH = 64;
     localparam int MAX_ACTIONS = 1024;
     localparam int MAX_CYCLES = 4096;
     localparam int DRAIN_CYCLES = 64;
@@ -25,13 +24,12 @@ module tb_binary_lut_snn_comparison;
     integer drain_cycles = 0;
     string stimulus_path;
 
-    logic learning_enable;
-    logic external_valid;
-    logic [3:0] event_source;
-    logic [15:0] teacher_spike;
-    logic maintenance_tick;
+    logic learning_enable = 1'b0;
+    logic external_valid = 1'b0;
+    logic [3:0] event_source = '0;
+    logic [15:0] teacher_spike = '0;
+    logic maintenance_tick = 1'b0;
     logic event_ready;
-    logic event_overflow;
     logic [15:0] spikes;
     logic [79:0] packed_connection_counts;
     logic evaluation;
@@ -43,18 +41,11 @@ module tb_binary_lut_snn_comparison;
 
     always #5 clk = ~clk;
 
-    binary_lut_array #(
-        .N(N),
-        .FIFO_DEPTH(FIFO_DEPTH)
+    binary_lut_array_benchmark_top #(
+        .N(N)
     ) binary_network (
         .clk(clk),
         .rst(rst),
-        .snapshot_pause(1'b0),
-        .snapshot_addr('0),
-        .snapshot_write_enable(1'b0),
-        .snapshot_write_data(32'b0),
-        .snapshot_read_data(),
-        .snapshot_write_ready(),
         .learning_enable(learning_enable),
         .event_valid(external_valid),
         .event_source(event_source),
@@ -62,7 +53,6 @@ module tb_binary_lut_snn_comparison;
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
-        .event_overflow(event_overflow),
         .spikes(spikes),
         .packed_connection_counts(packed_connection_counts)
     );
@@ -81,7 +71,7 @@ module tb_binary_lut_snn_comparison;
         repeat (2) @(posedge clk);
         @(negedge clk);
         rst = 1'b0;
-        $display("BCONFIG,%0d,%0d", N, FIFO_DEPTH);
+        $display("BCONFIG,%0d", N);
 
         while ((action_index < action_count ||
                 drain_cycles < DRAIN_CYCLES) &&
@@ -114,9 +104,6 @@ module tb_binary_lut_snn_comparison;
 
             @(posedge clk);
             #1;
-            if (event_overflow)
-                $fatal(1, "binary SNN event router overflowed");
-
             if (evaluation && !checked_learned_topology) begin
                 if (packed_connection_counts[CLASS0_PE*5 +: 5] != 5'd4 ||
                     packed_connection_counts[CLASS1_PE*5 +: 5] != 5'd4)
@@ -125,7 +112,7 @@ module tb_binary_lut_snn_comparison;
             end
 
             $display(
-                "BTRACE,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%04h,%0d,%0d,%0d",
+                "BTRACE,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%04h,%0d,%0d",
                 cycle_index,
                 action_index,
                 evaluation,
@@ -137,8 +124,7 @@ module tb_binary_lut_snn_comparison;
                 event_accepted,
                 spikes,
                 packed_connection_counts[CLASS0_PE*5 +: 5],
-                packed_connection_counts[CLASS1_PE*5 +: 5],
-                event_overflow
+                packed_connection_counts[CLASS1_PE*5 +: 5]
             );
 
             if (action_index < action_count &&

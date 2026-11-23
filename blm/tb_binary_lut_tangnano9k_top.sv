@@ -29,7 +29,6 @@ module tb_binary_lut_tangnano9k_top;
 
     blm_binary_lut_tangnano9k_top #(
         .N(16),
-        .EVENT_FIFO_DEPTH(64),
         .HEARTBEAT_DIV(8),
         .UART_CLOCK_HZ(UART_CLOCK_HZ),
         .UART_BAUD_RATE(UART_BAUD_RATE)
@@ -140,10 +139,7 @@ module tb_binary_lut_tangnano9k_top;
         send_command("READ 01");
         expect_line("PE 01 COUNT 01 SPIKE 0");
 
-        if (dut.network.event_overflow)
-            $fatal(1, "unexpected event-router overflow");
-
-        $display("PASS: binary 16-PE UART training, readback, and feedback");
+        $display("PASS: binary 16-PE UART training and PE-addressed readback");
         $finish;
     end
 

@@ -21,8 +21,7 @@ BENCHMARK_SEED ?= 1
 
 CORE_RTL := rtl/eap_dynamic_pe.sv rtl/eap16_event_router.sv rtl/eap16_top.sv
 COMPARISON_RTL := $(CORE_RTL) rtl/eap16_fixed_topology_top.sv
-BINARY_COMPARISON_RTL := rtl/eap16_event_router.sv \
-                         blm/binary_lut_pe.sv blm/binary_lut_array.sv \
+BINARY_COMPARISON_RTL := blm/binary_lut_pe.sv blm/binary_lut_array.sv \
                          blm/binary_lut_array_benchmark_top.sv
 COMPARISON_TB := $(BUILD_DIR)/tb_snn_comparison.vvp
 BINARY_COMPARISON_TB := $(BUILD_DIR)/tb_binary_lut_snn_comparison.vvp

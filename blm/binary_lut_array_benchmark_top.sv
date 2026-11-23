@@ -6,8 +6,7 @@
  */
 
 module binary_lut_array_benchmark_top #(
-    parameter int N = 16,
-    parameter int FIFO_DEPTH = 64
+    parameter int N = 16
 ) (
     input  logic clk,
     input  logic rst,
@@ -18,13 +17,11 @@ module binary_lut_array_benchmark_top #(
     input  logic [N-1:0] teacher_spike,
     input  logic maintenance_tick,
     output logic event_ready,
-    output logic event_overflow,
     output logic [N-1:0] spikes,
     output logic [N*5-1:0] packed_connection_counts
 );
     binary_lut_array #(
-        .N(N),
-        .FIFO_DEPTH(FIFO_DEPTH)
+        .N(N)
     ) network (
         .clk(clk),
         .rst(rst),
@@ -37,12 +34,13 @@ module binary_lut_array_benchmark_top #(
         .learning_enable(learning_enable),
         .event_valid(event_valid),
         .event_source(event_source),
+        .event_target_pe(selected_pe),
+        .event_broadcast(1'b1),
         .selected_pe(selected_pe),
         .synapse_map(),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
-        .event_overflow(event_overflow),
         .spikes(spikes),
         .packed_connection_counts(packed_connection_counts)
     );

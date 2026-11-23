@@ -7,7 +7,6 @@
 
 module blm_binary_lut_tangnano9k_top #(
     parameter int N = 16,
-    parameter int EVENT_FIFO_DEPTH = 64,
     parameter int unsigned HEARTBEAT_DIV = 6_750_000,
     parameter int UART_CLOCK_HZ = 13_500_000,
     parameter int UART_BAUD_RATE = 115_200
@@ -18,12 +17,13 @@ module blm_binary_lut_tangnano9k_top #(
     output logic uart_tx,
     output logic [5:0] led
 );
+    localparam int ID_W = $clog2(N);
+
     logic eap_clk;
     logic eap_rst;
     logic event_valid;
     logic [$clog2(N)-1:0] event_source;
     logic event_ready;
-    logic event_overflow;
     logic [N-1:0] teacher_spike;
     logic maintenance_tick;
     logic [N-1:0] spikes;
@@ -69,7 +69,6 @@ module blm_binary_lut_tangnano9k_top #(
 
     binary_lut_array #(
         .N(N),
-        .FIFO_DEPTH(EVENT_FIFO_DEPTH),
         .COUNT_SELECTED_ONLY(1'b1)
     ) network (
         .clk(eap_clk),
@@ -83,11 +82,12 @@ module blm_binary_lut_tangnano9k_top #(
         .learning_enable(1'b1),
         .event_valid(event_valid),
         .event_source(event_source),
+        .event_target_pe(status_pe[ID_W-1:0]),
+        .event_broadcast(1'b1),
         .selected_pe(status_pe[$clog2(N)-1:0]),
         .teacher_spike(teacher_spike),
         .maintenance_tick(maintenance_tick),
         .event_ready(event_ready),
-        .event_overflow(event_overflow),
         .spikes(spikes),
         .packed_connection_counts(packed_connection_counts)
     );
@@ -108,8 +108,6 @@ module blm_binary_lut_tangnano9k_top #(
     always_ff @(posedge eap_clk) begin
         if (eap_rst)
             led_status <= 6'b111111;
-        else if (event_overflow)
-            led_status <= 6'b000000;
         else
             led_status <= ~{selected_connection_count[3:0],
                             (selected_connection_count != 0),

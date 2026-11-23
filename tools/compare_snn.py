@@ -847,12 +847,34 @@ def run_trial(
 def read_synthesis_metrics(path: Path, top: str) -> SynthesisMetrics:
     with path.open("r", encoding="utf-8") as netlist_file:
         netlist = json.load(netlist_file)
-    try:
-        cells = netlist["modules"][top]["cells"]
-    except KeyError as error:
+
+    modules = netlist.get("modules")
+    if not isinstance(modules, dict):
         raise RuntimeError(
-            f"{path} does not contain synthesized top module {top}"
-        ) from error
+            f"{path} does not contain a synthesized module table"
+        )
+
+    module = modules.get(top)
+    if module is None:
+        top_modules = [
+            candidate
+            for candidate in modules.values()
+            if str(
+                candidate.get("attributes", {}).get("top", "")
+            ).lstrip("0") == "1"
+        ]
+        if len(top_modules) != 1:
+            raise RuntimeError(
+                f"{path} does not contain a unique synthesized top module "
+                f"for {top}"
+            )
+        module = top_modules[0]
+
+    cells = module.get("cells")
+    if not isinstance(cells, dict):
+        raise RuntimeError(
+            f"{path} has no synthesized cells for top module {top}"
+        )
 
     counts: dict[str, int] = {}
     for cell in cells.values():
